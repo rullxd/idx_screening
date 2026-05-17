@@ -1,10 +1,13 @@
-﻿// ===== API & CONFIG =====
+// ===== API & CONFIG =====
 let API_CONFIG = {
     BACKEND_URL: "http://localhost:3000",
-    ENDPOINTS: { brokerActivity: "/api/broker-activity" }
+    ENDPOINTS: {
+        brokerActivity: "/api/broker-activity",
+        marketDetector: "/api/market-detector"
+    }
 };
 const DEFAULT_PARAMS = { brokerCode: "AK", transactionType: "TRANSACTION_TYPE_GROSS", investorType: "INVESTOR_TYPE_ALL", marketBoard: "MARKET_TYPE_REGULER", period: "RT_PERIOD_LAST_1_DAY", limit: 50, page: 1 };
-let appState = { brokerActivityData: null, allData: [], filteredData: [], sortKey: 'Score', sortAsc: false, isLoading: false, currentPage: 'screener', detailChart: null, brokerChartInst: null };
+let appState = { brokerActivityData: null, allData: [], filteredData: [], sortKey: 'Score', sortAsc: false, isLoading: false, currentPage: 'screener', detailChart: null, brokerChartInst: null, marketDetectorData: null };
 
 async function fetchBrokerActivity(params = {}) {
     const p = { ...DEFAULT_PARAMS, ...params };
@@ -37,6 +40,214 @@ async function fetchBrokerActivity(params = {}) {
         return null;
     }
 }
+
+// ===== MARKET DETECTOR API =====
+async function fetchMarketDetector(stockCode, params = {}) {
+    const {
+        transactionType = 'TRANSACTION_TYPE_NET',
+        marketBoard = 'MARKET_BOARD_REGULER',
+        investorType = 'INVESTOR_TYPE_ALL',
+        limit = 25,
+        fromDate = '',
+        toDate = ''
+    } = params;
+
+    const queryObj = {
+        transaction_type: transactionType,
+        market_board: marketBoard,
+        investor_type: investorType,
+        limit
+    };
+    if (fromDate) queryObj.from = fromDate;
+    if (toDate) queryObj.to = toDate;
+
+    const query = new URLSearchParams(queryObj);
+    const url = `${API_CONFIG.BACKEND_URL}${API_CONFIG.ENDPOINTS.marketDetector}/${encodeURIComponent(stockCode.toUpperCase())}?${query}`;
+    console.log("📡 MarketDetector fetching:", url.substring(0, 120) + "...");
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        console.log("✅ MarketDetector data loaded for", stockCode, ":", JSON.stringify(data).substring(0, 80));
+        return data;
+    } catch (e) {
+        console.error("❌ MarketDetector Error:", e.message);
+        showError(`MarketDetector fetch failed: ${e.message}`);
+        return null;
+    }
+}
+
+function processMarketDetectorData(rawData) {
+    // Coba berbagai kemungkinan struktur response:
+    // { data: { transactions: [...] } } atau { data: [...] } atau { transactions: [...] } atau { data: { data: [...] } }
+    if (!rawData) return [];
+
+    let rows = null;
+
+    if (Array.isArray(rawData)) {
+        rows = rawData;
+    } else if (rawData.data) {
+        if (Array.isArray(rawData.data)) {
+            rows = rawData.data;
+        } else if (rawData.data.transactions && Array.isArray(rawData.data.transactions)) {
+            rows = rawData.data.transactions;
+        } else if (rawData.data.data && Array.isArray(rawData.data.data)) {
+            rows = rawData.data.data;
+        } else if (rawData.data.brokers_buy || rawData.data.brokers_sell) {
+            // Format mirip broker activity
+            const buy = rawData.data.brokers_buy || [];
+            const sell = rawData.data.brokers_sell || [];
+            rows = [
+                ...buy.map(r => ({ ...r, _side: 'buy' })),
+                ...sell.map(r => ({ ...r, _side: 'sell' }))
+            ];
+        }
+    } else if (rawData.transactions && Array.isArray(rawData.transactions)) {
+        rows = rawData.transactions;
+    }
+
+    if (!rows || rows.length === 0) {
+        console.warn("⚠️ MarketDetector: tidak bisa parse data, struktur:", JSON.stringify(rawData).substring(0, 300));
+        return { raw: rawData, rows: [], unknown: true };
+    }
+
+    return { raw: rawData, rows };
+}
+
+function renderMarketDetectorTable(data, stockCode) {
+    const container = document.getElementById('mdTableBody');
+    const titleEl = document.getElementById('mdStockTitle');
+    const statsEl = document.getElementById('mdStats');
+    if (!container) return;
+
+    if (titleEl) titleEl.textContent = `Market Detector — ${stockCode.toUpperCase()}`;
+
+    if (!data || data.unknown) {
+        // Tampilkan raw JSON untuk debug
+        container.innerHTML = `<tr><td colspan="99" style="color:#f5a623;padding:16px;font-size:12px;">
+            <strong>⚠️ Struktur response tidak dikenal. Raw data:</strong><br>
+            <pre style="font-size:10px;overflow:auto;max-height:200px;">${JSON.stringify(data?.raw || data, null, 2)}</pre>
+        </td></tr>`;
+        return;
+    }
+
+    const { rows } = data;
+    if (!rows.length) {
+        container.innerHTML = '<tr><td colspan="99" style="text-align:center;color:#888;padding:32px;">Tidak ada data untuk periode ini</td></tr>';
+        if (statsEl) statsEl.innerHTML = '';
+        return;
+    }
+
+    // Deteksi field yang tersedia dari row pertama
+    const sample = rows[0];
+    const hasNetValue = 'net_value' in sample || 'netValue' in sample;
+    const hasValue = 'value' in sample;
+    const hasLot = 'lot' in sample;
+    const hasFreq = 'freq' in sample || 'frequency' in sample;
+    const hasBroker = 'broker_code' in sample || 'broker' in sample;
+    const hasSide = '_side' in sample || 'side' in sample;
+    const hasDate = 'date' in sample || 'trading_date' in sample || 'created_at' in sample;
+
+    const getField = (row, ...keys) => {
+        for (const k of keys) if (k in row) return row[k];
+        return null;
+    };
+
+    // Hitung summary stats
+    let totalNetVal = 0, totalBuyVal = 0, totalSellVal = 0, totalNetLot = 0;
+    rows.forEach(r => {
+        const nv = getField(r, 'net_value', 'netValue') || 0;
+        const v = getField(r, 'value') || 0;
+        const side = getField(r, '_side', 'side') || '';
+        totalNetVal += parseFloat(nv);
+        if (side === 'buy') totalBuyVal += parseFloat(v);
+        if (side === 'sell') totalSellVal += parseFloat(v);
+        totalNetLot += parseFloat(getField(r, 'net_lot', 'netLot', 'lot') || 0);
+    });
+
+    if (statsEl) {
+        const netClass = totalNetVal >= 0 ? 'val-pos' : 'val-neg';
+        statsEl.innerHTML = `
+            <div class="md-stat-card">
+                <div class="md-stat-label">Net Value</div>
+                <div class="md-stat-val ${netClass}">${fmtVal(totalNetVal)}</div>
+            </div>
+            <div class="md-stat-card">
+                <div class="md-stat-label">Buy Value</div>
+                <div class="md-stat-val val-pos">${fmtVal(totalBuyVal)}</div>
+            </div>
+            <div class="md-stat-card">
+                <div class="md-stat-label">Sell Value</div>
+                <div class="md-stat-val val-neg">${fmtVal(totalSellVal)}</div>
+            </div>
+            <div class="md-stat-card">
+                <div class="md-stat-label">Transaksi</div>
+                <div class="md-stat-val">${rows.length}</div>
+            </div>
+        `;
+    }
+
+    // Render header dinamis
+    const headers = [];
+    if (hasDate) headers.push('Tanggal');
+    if (hasBroker) headers.push('Broker');
+    if (hasSide) headers.push('Side');
+    if (hasValue) headers.push('Value');
+    if (hasLot) headers.push('Lot');
+    if (hasFreq) headers.push('Freq');
+    if (hasNetValue) headers.push('Net Value');
+    // Tambah field lain yang ada
+    const knownFields = ['date', 'trading_date', 'created_at', 'broker_code', 'broker', '_side', 'side', 'value', 'lot', 'freq', 'frequency', 'net_value', 'netValue', 'net_lot', 'netLot', 'avg_price', 'avgPrice', 'stock_code'];
+    Object.keys(sample).filter(k => !knownFields.includes(k) && !k.startsWith('_')).forEach(k => headers.push(k));
+    if ('avg_price' in sample || 'avgPrice' in sample) headers.push('Avg Price');
+
+    const thead = document.getElementById('mdTableHead');
+    if (thead) thead.innerHTML = '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
+
+    container.innerHTML = rows.map(r => {
+        const side = getField(r, '_side', 'side') || '';
+        const sideClass = side === 'buy' ? 'val-pos' : side === 'sell' ? 'val-neg' : '';
+        const nv = parseFloat(getField(r, 'net_value', 'netValue') || 0);
+        const nvClass = nv > 0 ? 'val-pos' : nv < 0 ? 'val-neg' : '';
+
+        const cells = [];
+        if (hasDate) cells.push(`<td>${getField(r, 'date', 'trading_date', 'created_at') || '-'}</td>`);
+        if (hasBroker) cells.push(`<td><strong>${getField(r, 'broker_code', 'broker') || '-'}</strong></td>`);
+        if (hasSide) cells.push(`<td class="${sideClass}">${side.toUpperCase() || '-'}</td>`);
+        if (hasValue) cells.push(`<td>${fmtVal(parseFloat(r.value || 0))}</td>`);
+        if (hasLot) cells.push(`<td>${fmtNum(parseFloat(r.lot || 0))}</td>`);
+        if (hasFreq) cells.push(`<td>${fmtNum(parseFloat(getField(r, 'freq', 'frequency') || 0))}</td>`);
+        if (hasNetValue) cells.push(`<td class="${nvClass}">${fmtVal(nv)}</td>`);
+        Object.keys(sample).filter(k => !knownFields.includes(k) && !k.startsWith('_')).forEach(k => {
+            cells.push(`<td>${r[k] ?? '-'}</td>`);
+        });
+        if ('avg_price' in sample || 'avgPrice' in sample) cells.push(`<td>${(getField(r, 'avg_price', 'avgPrice') || 0).toLocaleString()}</td>`);
+
+        return `<tr>${cells.join('')}</tr>`;
+    }).join('');
+}
+
+async function loadMarketDetector() {
+    const stockCode = document.getElementById('mdStockCode')?.value?.trim() || 'BNBR';
+    const fromDate = document.getElementById('mdFromDate')?.value || '';
+    const toDate = document.getElementById('mdToDate')?.value || '';
+    const investorType = document.getElementById('mdInvestorType')?.value || 'INVESTOR_TYPE_ALL';
+    const transactionType = document.getElementById('mdTransactionType')?.value || 'TRANSACTION_TYPE_NET';
+    const limit = document.getElementById('mdLimit')?.value || 25;
+
+    const loadBtn = document.getElementById('mdLoadBtn');
+    if (loadBtn) { loadBtn.disabled = true; loadBtn.textContent = '⏳ Loading...'; }
+
+    const rawData = await fetchMarketDetector(stockCode, { fromDate, toDate, investorType, transactionType, limit });
+    appState.marketDetectorData = rawData;
+
+    const processed = processMarketDetectorData(rawData);
+    renderMarketDetectorTable(processed, stockCode);
+
+    if (loadBtn) { loadBtn.disabled = false; loadBtn.textContent = '⟳ Load'; }
+}
+
 
 function processRawBrokerData(rawData) {
     if (!rawData || !rawData.data) return [];
@@ -289,6 +500,17 @@ function openDetail(code) {
 }
 function closeDetail() { document.getElementById('detailPanel').classList.remove('open'); }
 function switchTab(tab) { appState.currentPage = tab;['screener', 'broker', 'heatmap', 'alerts', 'ranking'].forEach(t => { const page = document.getElementById('page-' + t); if (page) page.style.display = t === tab ? 'block' : 'none'; }); }
+function switchBrokerSubtab(sub) {
+    ['brokerlist', 'marketdetector'].forEach(s => {
+        const el = document.getElementById('broker-sub-' + s);
+        const btn = document.getElementById('subtab-' + s);
+        if (el) el.style.display = s === sub ? 'block' : 'none';
+        if (btn) {
+            btn.style.color = s === sub ? 'var(--green)' : 'var(--text2)';
+            btn.style.borderBottom = s === sub ? '2px solid var(--green)' : '2px solid transparent';
+        }
+    });
+}
 
 async function loadDataWithFilters() {
     setLoading(true);
@@ -326,6 +548,12 @@ async function initializeApp() {
     const filterToDate = document.getElementById('filterToDate');
     if (filterFromDate) filterFromDate.value = today;
     if (filterToDate) filterToDate.value = today;
+
+    // Set default dates untuk Market Detector
+    const mdFromDate = document.getElementById('mdFromDate');
+    const mdToDate = document.getElementById('mdToDate');
+    if (mdFromDate) mdFromDate.value = today;
+    if (mdToDate) mdToDate.value = today;
 
     // Auto-load data saat input berubah
     const filterBrokerCode = document.getElementById('filterBrokerCode');

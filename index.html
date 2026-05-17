@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 
 <head>
@@ -206,19 +206,106 @@
 
                     <!-- BROKER ACTIVITY -->
                     <div class="content" id="page-broker" style="display:none">
-                        <div class="broker-grid">
-                            <div class="broker-card">
-                                <div class="broker-card-title">TOP BUYER — AK (UBS)</div>
-                                <div id="brokerBuyList"></div>
+
+                        <!-- Sub-tabs -->
+                        <div style="display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:0;">
+                            <button class="broker-subtab active" id="subtab-brokerlist" onclick="switchBrokerSubtab('brokerlist')"
+                                style="background:none;border:none;color:var(--green);font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;border-bottom:2px solid var(--green);">
+                                🏦 Broker Buy/Sell List
+                            </button>
+                            <button class="broker-subtab" id="subtab-marketdetector" onclick="switchBrokerSubtab('marketdetector')"
+                                style="background:none;border:none;color:var(--text2);font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;border-bottom:2px solid transparent;">
+                                🔬 Market Detector
+                            </button>
+                        </div>
+
+                        <!-- Sub-page: Broker List -->
+                        <div id="broker-sub-brokerlist">
+                            <div class="broker-grid">
+                                <div class="broker-card">
+                                    <div class="broker-card-title">TOP BUYER — AK (UBS)</div>
+                                    <div id="brokerBuyList"></div>
+                                </div>
+                                <div class="broker-card">
+                                    <div class="broker-card-title">TOP SELLER — AK (UBS)</div>
+                                    <div id="brokerSellList"></div>
+                                </div>
                             </div>
-                            <div class="broker-card">
-                                <div class="broker-card-title">TOP SELLER — AK (UBS)</div>
-                                <div id="brokerSellList"></div>
+                            <div class="broker-card" style="margin-bottom:16px">
+                                <div class="broker-card-title">BROKER SUMMARY — WBSA</div>
+                                <div id="wbsaBrokerList"></div>
                             </div>
                         </div>
-                        <div class="broker-card" style="margin-bottom:16px">
-                            <div class="broker-card-title">BROKER SUMMARY — WBSA</div>
-                            <div id="wbsaBrokerList"></div>
+
+                        <!-- Sub-page: Market Detector -->
+                        <div id="broker-sub-marketdetector" style="display:none">
+
+                            <!-- Filter Bar -->
+                            <div class="broker-card" style="margin-bottom:16px;">
+                                <div class="broker-card-title" id="mdStockTitle">🔬 Market Detector</div>
+                                <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:flex-end;">
+                                    <div class="filter-group" style="min-width:100px;">
+                                        <label class="filter-label">Kode Saham</label>
+                                        <input class="filter-input" type="text" id="mdStockCode" placeholder="e.g. BNBR" value="BNBR"
+                                            style="text-transform:uppercase;font-weight:700;">
+                                    </div>
+                                    <div class="filter-group" style="min-width:120px;">
+                                        <label class="filter-label">Transaction Type</label>
+                                        <select class="filter-select" id="mdTransactionType">
+                                            <option value="TRANSACTION_TYPE_NET" selected>NET</option>
+                                            <option value="TRANSACTION_TYPE_GROSS">GROSS</option>
+                                        </select>
+                                    </div>
+                                    <div class="filter-group" style="min-width:130px;">
+                                        <label class="filter-label">Investor Type</label>
+                                        <select class="filter-select" id="mdInvestorType">
+                                            <option value="INVESTOR_TYPE_ALL" selected>ALL</option>
+                                            <option value="INVESTOR_TYPE_FOREIGN">Foreign</option>
+                                            <option value="INVESTOR_TYPE_DOMESTIC">Domestic</option>
+                                        </select>
+                                    </div>
+                                    <div class="filter-group" style="min-width:130px;">
+                                        <label class="filter-label">Market Board</label>
+                                        <select class="filter-select" id="mdMarketBoard">
+                                            <option value="MARKET_BOARD_REGULER" selected>Reguler</option>
+                                            <option value="MARKET_BOARD_TUNAI">Tunai</option>
+                                            <option value="MARKET_BOARD_NEGO">Nego</option>
+                                        </select>
+                                    </div>
+                                    <div class="filter-group" style="min-width:100px;">
+                                        <label class="filter-label">From Date</label>
+                                        <input class="filter-input" type="date" id="mdFromDate">
+                                    </div>
+                                    <div class="filter-group" style="min-width:100px;">
+                                        <label class="filter-label">To Date</label>
+                                        <input class="filter-input" type="date" id="mdToDate">
+                                    </div>
+                                    <div class="filter-group" style="min-width:70px;">
+                                        <label class="filter-label">Limit</label>
+                                        <input class="filter-input" type="number" id="mdLimit" value="25" min="1" max="100">
+                                    </div>
+                                    <button class="btn-screen" id="mdLoadBtn" onclick="loadMarketDetector()"
+                                        style="background:var(--green);color:#000;font-weight:700;padding:8px 20px;min-width:80px;">
+                                        ⟳ Load
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Stats Cards -->
+                            <div class="summary-grid" id="mdStats" style="margin-bottom:16px;"></div>
+
+                            <!-- Table -->
+                            <div class="broker-card">
+                                <div class="tbl-wrap">
+                                    <table id="mdTable">
+                                        <thead id="mdTableHead"></thead>
+                                        <tbody id="mdTableBody">
+                                            <tr><td colspan="99" style="text-align:center;color:#888;padding:40px;">Masukkan kode saham dan klik Load untuk memulai</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 

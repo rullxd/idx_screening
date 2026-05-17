@@ -21,7 +21,7 @@ if (!TOKEN) {
 
 console.log('✅ SERVER STARTED - TOKEN loaded from .env');
 
-// API Proxy Endpoint
+// API Proxy Endpoint — Broker Activity
 app.get('/api/broker-activity', async (req, res) => {
     try {
         const {
@@ -77,6 +77,60 @@ app.get('/api/broker-activity', async (req, res) => {
         res.status(500).json({
             error: error.message,
             message: 'Failed to fetch data from Stockbit API'
+        });
+    }
+});
+
+// API Proxy Endpoint — Market Detector per Saham
+app.get('/api/market-detector/:stockCode', async (req, res) => {
+    try {
+        const { stockCode } = req.params;
+        const {
+            transaction_type = 'TRANSACTION_TYPE_NET',
+            market_board = 'MARKET_BOARD_REGULER',
+            investor_type = 'INVESTOR_TYPE_ALL',
+            limit = 25,
+            from,
+            to
+        } = req.query;
+
+        const queryParams = new URLSearchParams({
+            transaction_type,
+            market_board,
+            investor_type,
+            limit
+        });
+
+        if (from) queryParams.append('from', from);
+        if (to) queryParams.append('to', to);
+
+        const apiUrl = `https://exodus.stockbit.com/marketdetectors/${stockCode.toUpperCase()}?${queryParams}`;
+        console.log(`📡 MarketDetector proxy: ${apiUrl.substring(0, 120)}...`);
+
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'Accept': 'application/json, text/plain, */*',
+                'Origin': 'https://stockbit.com',
+                'Referer': 'https://stockbit.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(`API returned HTTP ${response.status}: ${errBody.substring(0, 200)}`);
+        }
+
+        const data = await response.json();
+        console.log(`✅ MarketDetector fetched for ${stockCode}: ${JSON.stringify(data).substring(0, 80)}...`);
+        res.json(data);
+    } catch (error) {
+        console.error('❌ MarketDetector Proxy Error:', error.message);
+        res.status(500).json({
+            error: error.message,
+            message: 'Failed to fetch market detector data'
         });
     }
 });
