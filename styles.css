@@ -1201,4 +1201,43 @@ td {
     color: var(--text) !important;
     background: var(--bg3);
     border-radius: 4px 4px 0 0;
-}
+}
+/* ===== MARKET DETECTOR — INVESTOR TYPE ===== */
+.md-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.5px;
+}
+.md-type-badge.asing {
+    background: rgba(59,130,246,0.15);
+    color: var(--blue);
+    border: 1px solid rgba(59,130,246,0.3);
+}
+.md-type-badge.lokal {
+    background: rgba(167,139,250,0.15);
+    color: var(--purple);
+    border: 1px solid rgba(167,139,250,0.3);
+}
+.md-type-badge.pem {
+    background: rgba(245,158,11,0.15);
+    color: var(--yellow);
+    border: 1px solid rgba(245,158,11,0.3);
+}
+.md-type-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 160px;
+    flex: 1;
+    transition: border-color 0.15s;
+}
+.md-type-card:hover { border-color: var(--border2); }
+.md-group-row:hover { background: var(--bg3); }
+.md-group-row td { border-bottom: 1px solid rgba(255,255,255,0.03); }
+#broker-sub-marketdetector tbody tr:hover { background: var(--bg3); }
+#broker-sub-marketdetector .tbl-wrap { border: none; }

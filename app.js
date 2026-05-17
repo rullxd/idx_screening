@@ -1,4 +1,4 @@
-// ===== API & CONFIG =====
+﻿// ===== API & CONFIG =====
 let API_CONFIG = {
     BACKEND_URL: "http://localhost:3000",
     ENDPOINTS: {
@@ -79,153 +79,261 @@ async function fetchMarketDetector(stockCode, params = {}) {
 }
 
 function processMarketDetectorData(rawData) {
-    // Coba berbagai kemungkinan struktur response:
-    // { data: { transactions: [...] } } atau { data: [...] } atau { transactions: [...] } atau { data: { data: [...] } }
-    if (!rawData) return [];
+    if (!rawData || !rawData.data) return { raw: rawData, rows: [], unknown: true };
 
-    let rows = null;
+    const d = rawData.data;
 
-    if (Array.isArray(rawData)) {
-        rows = rawData;
-    } else if (rawData.data) {
-        if (Array.isArray(rawData.data)) {
-            rows = rawData.data;
-        } else if (rawData.data.transactions && Array.isArray(rawData.data.transactions)) {
-            rows = rawData.data.transactions;
-        } else if (rawData.data.data && Array.isArray(rawData.data.data)) {
-            rows = rawData.data.data;
-        } else if (rawData.data.brokers_buy || rawData.data.brokers_sell) {
-            // Format mirip broker activity
-            const buy = rawData.data.brokers_buy || [];
-            const sell = rawData.data.brokers_sell || [];
-            rows = [
-                ...buy.map(r => ({ ...r, _side: 'buy' })),
-                ...sell.map(r => ({ ...r, _side: 'sell' }))
-            ];
-        }
-    } else if (rawData.transactions && Array.isArray(rawData.transactions)) {
-        rows = rawData.transactions;
+    // ✅ Struktur asli Exodus: data.bandar_detector + data.broker_summary
+    if (d.broker_summary && (d.broker_summary.brokers_buy || d.broker_summary.brokers_sell)) {
+        const buyRows = (d.broker_summary.brokers_buy || []).map(r => ({ ...r, _side: 'buy' }));
+        const sellRows = (d.broker_summary.brokers_sell || []).map(r => ({ ...r, _side: 'sell' }));
+        return {
+            raw: rawData,
+            bandarDetector: d.bandar_detector || null,
+            brokerSummary: d.broker_summary,
+            buyRows,
+            sellRows,
+            from: d.from,
+            to: d.to
+        };
     }
+
+    // Fallback: format lain
+    let rows = null;
+    if (Array.isArray(d)) rows = d;
+    else if (d.brokers_buy || d.brokers_sell) {
+        rows = [
+            ...(d.brokers_buy || []).map(r => ({ ...r, _side: 'buy' })),
+            ...(d.brokers_sell || []).map(r => ({ ...r, _side: 'sell' }))
+        ];
+    } else if (d.transactions) rows = d.transactions;
 
     if (!rows || rows.length === 0) {
-        console.warn("⚠️ MarketDetector: tidak bisa parse data, struktur:", JSON.stringify(rawData).substring(0, 300));
+        console.warn("⚠️ MarketDetector: struktur tidak dikenal:", JSON.stringify(rawData).substring(0, 300));
         return { raw: rawData, rows: [], unknown: true };
     }
-
     return { raw: rawData, rows };
 }
 
 function renderMarketDetectorTable(data, stockCode) {
     const container = document.getElementById('mdTableBody');
-    const titleEl = document.getElementById('mdStockTitle');
-    const statsEl = document.getElementById('mdStats');
+    const titleEl   = document.getElementById('mdStockTitle');
+    const statsEl   = document.getElementById('mdStats');
+    const thead     = document.getElementById('mdTableHead');
     if (!container) return;
 
-    if (titleEl) titleEl.textContent = `Market Detector — ${stockCode.toUpperCase()}`;
+    if (titleEl) titleEl.textContent = `🔬 Market Detector — ${stockCode.toUpperCase()}`;
 
     if (!data || data.unknown) {
-        // Tampilkan raw JSON untuk debug
+        if (thead) thead.innerHTML = '';
         container.innerHTML = `<tr><td colspan="99" style="color:#f5a623;padding:16px;font-size:12px;">
-            <strong>⚠️ Struktur response tidak dikenal. Raw data:</strong><br>
+            <strong>⚠️ Struktur response tidak dikenal. Raw:</strong><br>
             <pre style="font-size:10px;overflow:auto;max-height:200px;">${JSON.stringify(data?.raw || data, null, 2)}</pre>
         </td></tr>`;
         return;
     }
 
-    const { rows } = data;
-    if (!rows.length) {
-        container.innerHTML = '<tr><td colspan="99" style="text-align:center;color:#888;padding:32px;">Tidak ada data untuk periode ini</td></tr>';
-        if (statsEl) statsEl.innerHTML = '';
+    const pf = v => parseFloat(v) || 0;
+    const accdistCls = s => s && (s.includes('Acc')) ? 'val-pos' : s && s.includes('Dist') ? 'val-neg' : 'val-neu';
+    const typeBadge = t => {
+        if (t === 'Asing')      return '<span class="md-type-badge asing">Asing</span>';
+        if (t === 'Pemerintah') return '<span class="md-type-badge pem">Pem</span>';
+        return '<span class="md-type-badge lokal">Lokal</span>';
+    };
+    const fmtDate = d => /^\d{8}$/.test(d) ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : (d || '-');
+    const signStr = v => v >= 0 ? '+' : '';
+
+    // ==========================================================
+    // 1. BANDAR DETECTOR STATS
+    // ==========================================================
+    if (statsEl) {
+        if (data.bandarDetector) {
+            const bd = data.bandarDetector;
+            const acCls = accdistCls(bd.broker_accdist);
+
+            const groups = [
+                { label: 'Top 1',      d: bd.top1  },
+                { label: 'Top 3',      d: bd.top3  },
+                { label: 'Top 5',      d: bd.top5  },
+                { label: 'Top 10',     d: bd.top10 },
+                { label: 'Avg/Broker', d: bd.avg   },
+                { label: 'Avg 5D',     d: bd.avg5  },
+            ];
+            const maxAmt = Math.max(...groups.map(g => Math.abs(g.d?.amount || 0)), 1);
+
+            const groupRows = groups.filter(g => g.d).map(g => {
+                const amt    = g.d.amount || 0;
+                const pct    = ((g.d.percent || 0) * 100).toFixed(2);
+                const vol    = fmtNum(g.d.vol || 0);
+                const ac     = g.d.accdist || '-';
+                const cls    = accdistCls(ac);
+                const barPct = Math.min(100, Math.abs(amt) / maxAmt * 100).toFixed(1);
+                const bColor = amt >= 0 ? 'var(--green)' : 'var(--red)';
+                return `<tr class="md-group-row">
+                    <td style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);white-space:nowrap;padding:5px 8px;">${g.label}</td>
+                    <td class="${cls}" style="font-size:11px;padding:5px 8px;">${ac}</td>
+                    <td class="${amt >= 0 ? 'val-pos' : 'val-neg'}" style="font-size:12px;font-weight:600;padding:5px 8px;text-align:right;">${signStr(amt)}${fmtVal(amt)}</td>
+                    <td style="font-size:11px;color:var(--text2);padding:5px 8px;text-align:right;">${signStr(pct)}${pct}%</td>
+                    <td style="font-size:11px;color:var(--text2);padding:5px 8px;text-align:right;">${signStr(vol)}${vol} lot</td>
+                    <td style="padding:5px 8px;min-width:120px;">
+                        <div style="height:5px;border-radius:3px;background:var(--bg3);overflow:hidden;">
+                            <div style="height:100%;width:${barPct}%;background:${bColor};border-radius:3px;"></div>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            statsEl.innerHTML = `
+            <div style="display:flex;flex-wrap:wrap;gap:10px;width:100%;margin-bottom:14px;">
+                <div class="md-stat-card"><div class="md-stat-label">Avg Price</div><div class="md-stat-val">${(bd.average||0).toFixed(0)}</div></div>
+                <div class="md-stat-card"><div class="md-stat-label">Broker Status</div><div class="md-stat-val ${acCls}">${bd.broker_accdist||'-'}</div></div>
+                <div class="md-stat-card"><div class="md-stat-label">Total Value</div><div class="md-stat-val">${fmtVal(bd.value||0)}</div></div>
+                <div class="md-stat-card"><div class="md-stat-label">Total Volume</div><div class="md-stat-val">${fmtNum(bd.volume||0)}</div></div>
+                <div class="md-stat-card"><div class="md-stat-label">Total Buyer</div><div class="md-stat-val val-pos">${bd.total_buyer||0}</div></div>
+                <div class="md-stat-card"><div class="md-stat-label">Total Seller</div><div class="md-stat-val val-neg">${bd.total_seller||0}</div></div>
+                <div class="md-stat-card"><div class="md-stat-label"># Broker</div><div class="md-stat-val">${bd.number_broker_buysell||0}</div></div>
+                ${data.from ? `<div class="md-stat-card" style="border-color:rgba(100,100,200,0.25);"><div class="md-stat-label">Periode</div><div class="md-stat-val" style="font-size:12px;">${data.from} → ${data.to||'?'}</div></div>` : ''}
+            </div>
+            <div style="width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+                <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">📊 Analisis Broker Group — Net Acc/Dist</div>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;">
+                        <th style="padding:4px 8px;text-align:left;">Group</th>
+                        <th style="padding:4px 8px;text-align:left;">Status</th>
+                        <th style="padding:4px 8px;text-align:right;">Net Amount</th>
+                        <th style="padding:4px 8px;text-align:right;">%</th>
+                        <th style="padding:4px 8px;text-align:right;">Net Lot</th>
+                        <th style="padding:4px 8px;min-width:120px;">Bar</th>
+                    </tr></thead>
+                    <tbody>${groupRows}</tbody>
+                </table>
+            </div>`;
+        } else {
+            statsEl.innerHTML = '';
+        }
+    }
+
+    // ==========================================================
+    // 2. PROSES ROWS
+    // ==========================================================
+    const buyRaw  = data.buyRows  || [];
+    const sellRaw = data.sellRows || [];
+
+    if (!buyRaw.length && !sellRaw.length) {
+        if (thead) thead.innerHTML = '';
+        container.innerHTML = '<tr><td colspan="99" style="text-align:center;color:#888;padding:32px;">Tidak ada data broker untuk periode ini</td></tr>';
         return;
     }
 
-    // Deteksi field yang tersedia dari row pertama
-    const sample = rows[0];
-    const hasNetValue = 'net_value' in sample || 'netValue' in sample;
-    const hasValue = 'value' in sample;
-    const hasLot = 'lot' in sample;
-    const hasFreq = 'freq' in sample || 'frequency' in sample;
-    const hasBroker = 'broker_code' in sample || 'broker' in sample;
-    const hasSide = '_side' in sample || 'side' in sample;
-    const hasDate = 'date' in sample || 'trading_date' in sample || 'created_at' in sample;
+    const mkBuy  = r => ({ side:'BUY',  broker:r.netbs_broker_code, type:r.type||'-',
+        netLot:pf(r.blot), netValue:pf(r.bval), cumLot:pf(r.blotv), cumValue:pf(r.bvalv),
+        avgPrice:pf(r.netbs_buy_avg_price), freq:pf(r.freq), date:fmtDate(r.netbs_date) });
+    const mkSell = r => ({ side:'SELL', broker:r.netbs_broker_code, type:r.type||'-',
+        netLot:pf(r.slot), netValue:pf(r.sval), cumLot:pf(r.slotv), cumValue:pf(r.svalv),
+        avgPrice:pf(r.netbs_sell_avg_price), freq:pf(r.freq), date:fmtDate(r.netbs_date) });
 
-    const getField = (row, ...keys) => {
-        for (const k of keys) if (k in row) return row[k];
-        return null;
-    };
+    const buyRows  = buyRaw.map(mkBuy).sort((a,b) => b.netValue - a.netValue);
+    const sellRows = sellRaw.map(mkSell).sort((a,b) => a.netValue - b.netValue);
 
-    // Hitung summary stats
-    let totalNetVal = 0, totalBuyVal = 0, totalSellVal = 0, totalNetLot = 0;
-    rows.forEach(r => {
-        const nv = getField(r, 'net_value', 'netValue') || 0;
-        const v = getField(r, 'value') || 0;
-        const side = getField(r, '_side', 'side') || '';
-        totalNetVal += parseFloat(nv);
-        if (side === 'buy') totalBuyVal += parseFloat(v);
-        if (side === 'sell') totalSellVal += parseFloat(v);
-        totalNetLot += parseFloat(getField(r, 'net_lot', 'netLot', 'lot') || 0);
+    // ==========================================================
+    // 3. INVESTOR TYPE BREAKDOWN
+    // ==========================================================
+    const allP = [...buyRows, ...sellRows];
+    const typeMap = {};
+    allP.forEach(r => {
+        if (!typeMap[r.type]) typeMap[r.type] = { buyVal:0, sellVal:0, buyLot:0, sellLot:0, buyCount:0, sellCount:0 };
+        const t = typeMap[r.type];
+        if (r.side==='BUY')  { t.buyVal+=r.netValue;  t.buyLot+=r.netLot;  t.buyCount++;  }
+        else                  { t.sellVal+=r.netValue; t.sellLot+=r.netLot; t.sellCount++; }
     });
 
-    if (statsEl) {
-        const netClass = totalNetVal >= 0 ? 'val-pos' : 'val-neg';
-        statsEl.innerHTML = `
-            <div class="md-stat-card">
-                <div class="md-stat-label">Net Value</div>
-                <div class="md-stat-val ${netClass}">${fmtVal(totalNetVal)}</div>
+    const typeBreakdown = Object.entries(typeMap).map(([type, d]) => {
+        const net    = d.buyVal + d.sellVal;
+        const netLot = d.buyLot + d.sellLot;
+        const nCls   = net >= 0 ? 'val-pos' : 'val-neg';
+        const nlCls  = netLot >= 0 ? 'val-pos' : 'val-neg';
+        return `<div class="md-type-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                ${typeBadge(type)}
+                <span style="font-size:10px;color:var(--text3);">${d.buyCount}B / ${d.sellCount}S</span>
             </div>
-            <div class="md-stat-card">
-                <div class="md-stat-label">Buy Value</div>
-                <div class="md-stat-val val-pos">${fmtVal(totalBuyVal)}</div>
-            </div>
-            <div class="md-stat-card">
-                <div class="md-stat-label">Sell Value</div>
-                <div class="md-stat-val val-neg">${fmtVal(totalSellVal)}</div>
-            </div>
-            <div class="md-stat-card">
-                <div class="md-stat-label">Transaksi</div>
-                <div class="md-stat-val">${rows.length}</div>
-            </div>
-        `;
-    }
-
-    // Render header dinamis
-    const headers = [];
-    if (hasDate) headers.push('Tanggal');
-    if (hasBroker) headers.push('Broker');
-    if (hasSide) headers.push('Side');
-    if (hasValue) headers.push('Value');
-    if (hasLot) headers.push('Lot');
-    if (hasFreq) headers.push('Freq');
-    if (hasNetValue) headers.push('Net Value');
-    // Tambah field lain yang ada
-    const knownFields = ['date', 'trading_date', 'created_at', 'broker_code', 'broker', '_side', 'side', 'value', 'lot', 'freq', 'frequency', 'net_value', 'netValue', 'net_lot', 'netLot', 'avg_price', 'avgPrice', 'stock_code'];
-    Object.keys(sample).filter(k => !knownFields.includes(k) && !k.startsWith('_')).forEach(k => headers.push(k));
-    if ('avg_price' in sample || 'avgPrice' in sample) headers.push('Avg Price');
-
-    const thead = document.getElementById('mdTableHead');
-    if (thead) thead.innerHTML = '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
-
-    container.innerHTML = rows.map(r => {
-        const side = getField(r, '_side', 'side') || '';
-        const sideClass = side === 'buy' ? 'val-pos' : side === 'sell' ? 'val-neg' : '';
-        const nv = parseFloat(getField(r, 'net_value', 'netValue') || 0);
-        const nvClass = nv > 0 ? 'val-pos' : nv < 0 ? 'val-neg' : '';
-
-        const cells = [];
-        if (hasDate) cells.push(`<td>${getField(r, 'date', 'trading_date', 'created_at') || '-'}</td>`);
-        if (hasBroker) cells.push(`<td><strong>${getField(r, 'broker_code', 'broker') || '-'}</strong></td>`);
-        if (hasSide) cells.push(`<td class="${sideClass}">${side.toUpperCase() || '-'}</td>`);
-        if (hasValue) cells.push(`<td>${fmtVal(parseFloat(r.value || 0))}</td>`);
-        if (hasLot) cells.push(`<td>${fmtNum(parseFloat(r.lot || 0))}</td>`);
-        if (hasFreq) cells.push(`<td>${fmtNum(parseFloat(getField(r, 'freq', 'frequency') || 0))}</td>`);
-        if (hasNetValue) cells.push(`<td class="${nvClass}">${fmtVal(nv)}</td>`);
-        Object.keys(sample).filter(k => !knownFields.includes(k) && !k.startsWith('_')).forEach(k => {
-            cells.push(`<td>${r[k] ?? '-'}</td>`);
-        });
-        if ('avg_price' in sample || 'avgPrice' in sample) cells.push(`<td>${(getField(r, 'avg_price', 'avgPrice') || 0).toLocaleString()}</td>`);
-
-        return `<tr>${cells.join('')}</tr>`;
+            <div style="font-size:11px;margin:3px 0;">Buy&nbsp;<span class="val-pos" style="font-weight:600;">${fmtVal(d.buyVal)}</span></div>
+            <div style="font-size:11px;margin:3px 0;">Sell&nbsp;<span class="val-neg" style="font-weight:600;">${fmtVal(d.sellVal)}</span></div>
+            <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+            <div class="${nCls}" style="font-size:13px;font-weight:700;">Net ${fmtVal(net)}</div>
+            <div class="${nlCls}" style="font-size:11px;">${signStr(netLot)}${fmtNum(netLot)} lot</div>
+        </div>`;
     }).join('');
+
+    // ==========================================================
+    // 4. RENDER TABLE ROWS
+    // ==========================================================
+    const maxBuyVal  = Math.max(...buyRows.map(r  => Math.abs(r.netValue)), 1);
+    const maxSellVal = Math.max(...sellRows.map(r => Math.abs(r.netValue)), 1);
+
+    const mkRow = (r, maxVal) => {
+        const nvCls  = r.netValue >= 0 ? 'val-pos' : 'val-neg';
+        const nlCls  = r.netLot  >= 0 ? 'val-pos' : 'val-neg';
+        const barPct = Math.min(100, Math.abs(r.netValue)/maxVal*100).toFixed(1);
+        const bColor = r.side==='BUY' ? 'var(--green)' : 'var(--red)';
+        return `<tr>
+            <td><strong style="font-family:'Space Mono',monospace;font-size:12px;">${r.broker}</strong></td>
+            <td>${typeBadge(r.type)}</td>
+            <td class="${nlCls}" style="font-size:12px;">${signStr(r.netLot)}${fmtNum(r.netLot)}</td>
+            <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span class="${nvCls}" style="font-size:12px;font-weight:600;white-space:nowrap;">${signStr(r.netValue)}${fmtVal(r.netValue)}</span>
+                    <div style="flex:1;min-width:40px;height:4px;border-radius:2px;background:var(--bg3);overflow:hidden;">
+                        <div style="height:100%;width:${barPct}%;background:${bColor};border-radius:2px;"></div>
+                    </div>
+                </div>
+            </td>
+            <td style="color:var(--text2);font-size:11px;">${fmtNum(r.cumLot)}</td>
+            <td style="color:var(--text2);font-size:11px;">${fmtVal(r.cumValue)}</td>
+            <td style="font-size:12px;">${r.avgPrice.toFixed(0)}</td>
+            <td style="color:var(--text2);font-size:11px;">${fmtNum(r.freq)}</td>
+            <td style="color:var(--text3);font-size:10px;">${r.date}</td>
+        </tr>`;
+    };
+
+    const colHeader = `<tr>
+        <th>Broker</th><th>Type</th><th>Net Lot</th>
+        <th>Net Value</th><th>Cum Lot</th><th>Cum Value</th>
+        <th>Avg Price</th><th>Freq</th><th>Tanggal</th>
+    </tr>`;
+
+    if (thead) thead.innerHTML = '';
+
+    container.innerHTML = `<tr><td colspan="99" style="padding:0;">
+        <!-- Investor Type Breakdown -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;padding:12px 0 14px;">${typeBreakdown}</div>
+
+        <!-- Buy Table -->
+        <div style="margin-bottom:16px;">
+            <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--green);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;padding:6px 0;border-bottom:1px solid rgba(0,229,160,0.2);">
+                🟢 Net Buyer — ${buyRows.length} Broker
+            </div>
+            <div style="overflow-x:auto;border-radius:6px;border:1px solid rgba(0,229,160,0.1);">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead style="background:rgba(0,229,160,0.06);">${colHeader}</thead>
+                    <tbody>${buyRows.map(r => mkRow(r, maxBuyVal)).join('')}</tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Sell Table -->
+        <div>
+            <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--red);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;padding:6px 0;border-bottom:1px solid rgba(255,77,109,0.2);">
+                🔴 Net Seller — ${sellRows.length} Broker
+            </div>
+            <div style="overflow-x:auto;border-radius:6px;border:1px solid rgba(255,77,109,0.1);">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead style="background:rgba(255,77,109,0.06);">${colHeader}</thead>
+                    <tbody>${sellRows.map(r => mkRow(r, maxSellVal)).join('')}</tbody>
+                </table>
+            </div>
+        </div>
+    </td></tr>`;
 }
 
 async function loadMarketDetector() {
