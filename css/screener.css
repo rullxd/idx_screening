@@ -1,0 +1,108 @@
+/* ==============================================
+   SCREENER — Toolbar, Quick Filters
+   ============================================== */
+
+.screener-toolbar {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.screener-toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+.stb-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stb-group .filter-input,
+.stb-group .filter-select { margin: 0; }
+
+.stb-divider {
+    width: 1px;
+    height: 36px;
+    background: var(--border);
+    align-self: flex-end;
+    margin: 0 4px;
+}
+
+.stb-actions {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+    margin-left: auto;
+}
+
+.stb-btn {
+    padding: 7px 14px !important;
+    font-size: 12px !important;
+    margin: 0 !important;
+    width: auto !important;
+}
+
+/* Quick filter chips */
+.stb-quick {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    gap: 8px;
+    align-items: center;
+}
+
+.stb-quick-label {
+    font-size: 10px;
+    color: var(--text3);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.stb-chip {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    padding: 4px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.stb-chip:hover { background: var(--border); color: var(--text); border-color: var(--border2); }
+
+.stb-chip-reset {
+    background: transparent;
+    color: var(--text3);
+    border-color: var(--border);
+    font-size: 11px;
+}
+
+/* Signal dots (inside table) */
+.signal-bar { display: flex; gap: 2px; align-items: center; }
+.signal-dot { width: 6px; height: 6px; border-radius: 50%; }
+.signal-dot.on  { background: var(--green); }
+.signal-dot.off { background: var(--border2); }
+
+/* Type badges */
+.type-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-family: 'Space Mono', monospace; }
+.type-asing      { background: var(--blue2); color: var(--blue); }
+.type-lokal      { background: var(--purple2); color: var(--purple); }
+.type-pemerintah { background: var(--yellow2); color: var(--yellow); }
+
+/* Empty state */
+.empty-state { text-align: center; color: var(--text3); padding: 48px !important; font-size: 13px; }
+.empty-title { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+.empty-sub   { font-size: 12px; color: var(--text3); }

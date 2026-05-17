@@ -1,0 +1,110 @@
+/* ==============================================
+   MARKET DETECTOR — Filter, Stats, Charts, Table
+   ============================================== */
+
+/* ----- FILTER BAR ----- */
+.md-filter-bar { margin-bottom: 16px; }
+
+.md-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+    align-items: flex-end;
+}
+
+.md-code-input { text-transform: uppercase; font-weight: 700; }
+.md-limit-group { min-width: 70px; }
+
+/* ----- STATS CARDS ----- */
+.md-stats-area { margin-bottom: 16px; }
+
+#mdStats { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.md-stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    flex: 1;
+    min-width: 120px;
+}
+
+.md-stat-label {
+    font-size: 10px;
+    color: var(--text2);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.md-stat-val {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+}
+
+/* ----- INVESTOR TYPE BADGES ----- */
+.md-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.5px;
+}
+
+.md-type-badge.asing { background: rgba(59,130,246,0.15); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
+.md-type-badge.lokal { background: rgba(167,139,250,0.15); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+.md-type-badge.pem   { background: rgba(245,158,11,0.15); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+
+/* ----- INVESTOR TYPE CARD ----- */
+.md-type-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 160px;
+    flex: 1;
+    transition: border-color 0.15s;
+}
+.md-type-card:hover { border-color: var(--border2); }
+
+/* ----- GROUP TABLE ROWS ----- */
+.md-group-row:hover { background: var(--bg3); }
+.md-group-row td { border-bottom: 1px solid rgba(255,255,255,0.03); }
+
+/* ----- TABLE ----- */
+.md-table-card { padding: 0; overflow: hidden; }
+.md-table-card .tbl-wrap { margin: 0; }
+
+#mdTable thead th { background: var(--bg3); font-size: 11px; padding: 9px 12px; }
+#mdTable tbody tr { cursor: default; }
+
+#broker-sub-marketdetector tbody tr:hover { background: var(--bg3); }
+#broker-sub-marketdetector .tbl-wrap { border: none; }
+
+/* ----- CHARTS ----- */
+.md-chart-wrapper {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    align-items: flex-start;
+}
+
+.md-chart-main { flex: 1 1 0; min-width: 0; }
+.md-chart-side { width: 240px; flex-shrink: 0; }
+
+.md-chart-canvas-wrap canvas {
+    display: block;
+    width: 100% !important;
+}
+
+/* ----- LEGACY (kept for compat) ----- */
+.broker-subtab:hover {
+    color: var(--text) !important;
+    background: var(--bg3);
+    border-radius: 4px 4px 0 0;
+}
