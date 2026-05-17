@@ -1,0 +1,365 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BandarScope — IDX Bandarmology Screener</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <div class="header">
+        <div style="display:flex;align-items:center;gap:16px">
+            <div class="logo">BandarScope <span>/ IDX Bandarmology</span></div>
+        </div>
+        <div class="header-right">
+            <div class="live-badge">
+                <div class="live-dot"></div> LIVE DATA
+            </div>
+            <div class="date-badge" id="liveDate">2026-05-17</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">Menu</div>
+                <div class="nav-item active" onclick="switchTab('screener')">
+                    <div class="nav-dot"></div>Bandar Screener
+                </div>
+                <div class="nav-item" onclick="switchTab('broker')">
+                    <div class="nav-dot"></div>Broker Activity
+                </div>
+                <div class="nav-item" onclick="switchTab('heatmap')">
+                    <div class="nav-dot"></div>Heatmap Bandar
+                </div>
+                <div class="nav-item" onclick="switchTab('alerts')">
+                    <div class="nav-dot"></div>Alert & Signals
+                </div>
+                <div class="nav-item" onclick="switchTab('ranking')">
+                    <div class="nav-dot"></div>Broker Ranking
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">📡 Data Source</div>
+                <div class="filter-group">
+                    <label class="filter-label">Broker Code</label>
+                    <input class="filter-input" type="text" id="filterBrokerCode" placeholder="e.g. AK" value="AK">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">From Date</label>
+                    <input class="filter-input" type="date" id="filterFromDate">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">To Date</label>
+                    <input class="filter-input" type="date" id="filterToDate">
+                </div>
+                <button class="btn-screen" onclick="loadDataWithFilters()"
+                    style="background:#00e5a0;color:#000;font-weight:600;">⟳ Load Data</button>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Filter Screener</div>
+                <div class="filter-group">
+                    <label class="filter-label">Investor Type</label>
+                    <select class="filter-select" id="f-investor">
+                        <option value="ALL">Semua Investor</option>
+                        <option value="ASING">Asing</option>
+                        <option value="LOKAL">Lokal</option>
+                        <option value="PEMERINTAH">Pemerintah</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Acc/Dist Status</label>
+                    <select class="filter-select" id="f-accdist">
+                        <option value="ALL">Semua</option>
+                        <option value="Acc">Accumulation</option>
+                        <option value="Dist">Distribution</option>
+                        <option value="Neutral">Neutral</option>
+                        <option value="Small Acc">Small Acc</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Min Net Value (Milyar)</label>
+                    <div class="filter-row">
+                        <input class="filter-input" type="number" id="f-minval" placeholder="Min" value="">
+                        <input class="filter-input" type="number" id="f-maxval" placeholder="Max" value="">
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Min Freq</label>
+                    <input class="filter-input" type="number" id="f-freq" placeholder="Min frekuensi" value="">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Min Bandar Score</label>
+                    <select class="filter-select" id="f-score">
+                        <option value="0">Semua Score</option>
+                        <option value="7">7+ (High)</option>
+                        <option value="5">5+ (Medium)</option>
+                        <option value="3">3+ (Low)</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Broker Code</label>
+                    <input class="filter-input" type="text" id="f-broker" placeholder="e.g. AK, YP, MG">
+                </div>
+                <button class="btn-screen" onclick="applyFilter()">▶ Jalankan Screening</button>
+                <button class="btn-reset" onclick="resetFilter()">Reset Filter</button>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Quick Filter</div>
+                <div class="nav-item" onclick="quickFilter('acc')">
+                    <div class="nav-dot" style="background:var(--green)"></div>Akumulasi Kuat
+                </div>
+                <div class="nav-item" onclick="quickFilter('foreign_buy')">
+                    <div class="nav-dot" style="background:var(--blue)"></div>Foreign Net Buy
+                </div>
+                <div class="nav-item" onclick="quickFilter('high_score')">
+                    <div class="nav-dot" style="background:var(--yellow)"></div>High Bandar Score
+                </div>
+                <div class="nav-item" onclick="quickFilter('high_freq')">
+                    <div class="nav-dot" style="background:var(--purple)"></div>High Frequency
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN -->
+        <div class="main">
+            <div class="tabs">
+                <div class="tab active" id="tab-screener" onclick="switchTab('screener')">📊 Bandar Screener</div>
+                <div class="tab" id="tab-broker" onclick="switchTab('broker')">🏦 Broker Activity</div>
+                <div class="tab" id="tab-heatmap" onclick="switchTab('heatmap')">🔥 Heatmap</div>
+                <div class="tab" id="tab-alerts" onclick="switchTab('alerts')">🔔 Alerts</div>
+                <div class="tab" id="tab-ranking" onclick="switchTab('ranking')">🏆 Ranking</div>
+            </div>
+
+            <div class="main-inner">
+                <div class="main-content" id="mainContent">
+                    <div class="content" id="page-screener">
+                        <!-- Summary -->
+                        <div class="summary-grid">
+                            <div class="s-card green">
+                                <div class="s-card-label">TOTAL ACC</div>
+                                <div class="s-card-val" id="sum-acc">0</div>
+                                <div class="s-card-sub">saham akumulasi</div>
+                            </div>
+                            <div class="s-card red">
+                                <div class="s-card-label">TOTAL DIST</div>
+                                <div class="s-card-val" id="sum-dist">0</div>
+                                <div class="s-card-sub">saham distribusi</div>
+                            </div>
+                            <div class="s-card blue">
+                                <div class="s-card-label">TOTAL BUY</div>
+                                <div class="s-card-val" id="sum-buy">Rp0</div>
+                                <div class="s-card-sub">net buy value</div>
+                            </div>
+                            <div class="s-card yellow">
+                                <div class="s-card-label">SCREENED</div>
+                                <div class="s-card-val" id="sum-total">0</div>
+                                <div class="s-card-sub">saham tersaring</div>
+                            </div>
+                        </div>
+
+                        <div class="table-header">
+                            <div class="table-title">
+                                Hasil Screening
+                                <span class="count-badge" id="rowCount">0 saham</span>
+                            </div>
+                            <div class="table-actions">
+                                <input class="search-box" type="text" placeholder="Cari kode/nama..." id="searchBox"
+                                    oninput="filterTable()">
+                            </div>
+                        </div>
+
+                        <div class="tbl-wrap">
+                            <table id="mainTable">
+                                <thead>
+                                    <tr>
+                                        <th onclick="sortTable('code')">KODE <span class="sort-icon">↕</span></th>
+                                        <th onclick="sortTable('close')">CLOSE <span class="sort-icon">↕</span></th>
+                                        <th onclick="sortTable('change')">SPREAD <span class="sort-icon">↕</span></th>
+                                        <th onclick="sortTable('netval')">NET VALUE <span class="sort-icon">↕</span>
+                                        </th>
+                                        <th onclick="sortTable('lot')">NET LOT <span class="sort-icon">↕</span></th>
+                                        <th onclick="sortTable('freq')">BUY FREQ <span class="sort-icon">↕</span></th>
+                                        <th>🌍 FOREIGN</th>
+                                        <th>BROKERS</th>
+                                        <th onclick="sortTable('accdist')">ACC/DIST <span class="sort-icon">↕</span>
+                                        </th>
+                                        <th onclick="sortTable('score')">SCORE <span class="sort-icon">↕</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- BROKER ACTIVITY -->
+                    <div class="content" id="page-broker" style="display:none">
+                        <div class="broker-grid">
+                            <div class="broker-card">
+                                <div class="broker-card-title">TOP BUYER — AK (UBS)</div>
+                                <div id="brokerBuyList"></div>
+                            </div>
+                            <div class="broker-card">
+                                <div class="broker-card-title">TOP SELLER — AK (UBS)</div>
+                                <div id="brokerSellList"></div>
+                            </div>
+                        </div>
+                        <div class="broker-card" style="margin-bottom:16px">
+                            <div class="broker-card-title">BROKER SUMMARY — WBSA</div>
+                            <div id="wbsaBrokerList"></div>
+                        </div>
+                    </div>
+
+                    <!-- HEATMAP -->
+                    <div class="content" id="page-heatmap" style="display:none">
+                        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
+                            <div class="table-title">Heatmap Bandar Score</div>
+                            <div style="display:flex;gap:8px;margin-left:auto;font-size:11px;color:var(--text2)">
+                                <span
+                                    style="background:rgba(0,229,160,0.3);padding:2px 8px;border-radius:3px;color:var(--green)">■
+                                    Akumulasi</span>
+                                <span
+                                    style="background:rgba(255,77,109,0.3);padding:2px 8px;border-radius:3px;color:var(--red)">■
+                                    Distribusi</span>
+                                <span style="background:var(--bg3);padding:2px 8px;border-radius:3px">■ Neutral</span>
+                            </div>
+                        </div>
+                        <div class="heatmap-grid" id="heatmapGrid"></div>
+                    </div>
+
+                    <!-- ALERTS -->
+                    <div class="content" id="page-alerts" style="display:none">
+                        <div class="table-header">
+                            <div class="table-title">Signal Alerts <span class="fa-badge">LIVE</span></div>
+                        </div>
+                        <div class="alert-list" id="alertList"></div>
+                    </div>
+
+                    <!-- RANKING -->
+                    <div class="content" id="page-ranking" style="display:none">
+                        <div class="summary-grid" style="margin-bottom:20px">
+                            <div class="s-card blue">
+                                <div class="s-card-label">BROKER BUY</div>
+                                <div class="s-card-val" id="r-top-buyer">AK</div>
+                                <div class="s-card-sub">top net buyer</div>
+                            </div>
+                            <div class="s-card red">
+                                <div class="s-card-label">BROKER SELL</div>
+                                <div class="s-card-val" id="r-top-seller">-</div>
+                                <div class="s-card-sub">top net seller</div>
+                            </div>
+                            <div class="s-card green">
+                                <div class="s-card-label">ASING FLOW</div>
+                                <div class="s-card-val" id="r-asing">+</div>
+                                <div class="s-card-sub">foreign net flow</div>
+                            </div>
+                            <div class="s-card yellow">
+                                <div class="s-card-label">LOKAL FLOW</div>
+                                <div class="s-card-val" id="r-lokal">-</div>
+                                <div class="s-card-sub">local net flow</div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom:16px">
+                            <div style="height:280px;position:relative;">
+                                <canvas id="brokerChart" role="img"
+                                    aria-label="Bar chart of top broker net buy/sell activity">Broker net buy/sell
+                                    chart.</canvas>
+                            </div>
+                        </div>
+                        <div class="broker-grid">
+                            <div class="broker-card">
+                                <div class="broker-card-title">TOP 10 NET BUYER (by Value)</div>
+                                <div id="rankBuyList"></div>
+                            </div>
+                            <div class="broker-card">
+                                <div class="broker-card-title">TOP 10 NET SELLER (by Value)</div>
+                                <div id="rankSellList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DETAIL PANEL -->
+                <div class="detail-panel" id="detailPanel">
+                    <button class="detail-close" onclick="closeDetail()">✕ tutup</button>
+                    <div class="detail-stock">
+                        <div class="detail-code" id="d-code">BMRI</div>
+                        <div class="detail-name" id="d-name">Bank Mandiri Tbk.</div>
+                        <div class="detail-price">
+                            <div class="detail-price-val" id="d-price">4,214</div>
+                            <div class="detail-change val-pos" id="d-change">+2.3%</div>
+                        </div>
+                    </div>
+
+                    <div class="detail-section">
+                        <div class="detail-section-title">Bandar Analysis</div>
+                        <div class="detail-row"><span class="detail-row-label">Acc/Dist</span><span
+                                class="detail-row-val" id="d-accdist">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Bandar Score</span><span
+                                class="detail-row-val" id="d-bscore">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Net Value</span><span
+                                class="detail-row-val" id="d-netval">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Net Lot</span><span
+                                class="detail-row-val" id="d-netlot">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Avg Price</span><span
+                                class="detail-row-val" id="d-avgprice">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Frekuensi</span><span
+                                class="detail-row-val" id="d-freq">—</span></div>
+                    </div>
+
+                    <div class="detail-section">
+                        <div class="detail-section-title">Market Data</div>
+                        <div class="detail-row"><span class="detail-row-label">Close</span><span class="detail-row-val"
+                                id="d-close">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Volume</span><span class="detail-row-val"
+                                id="d-vol">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Value</span><span class="detail-row-val"
+                                id="d-val">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Foreign Buy</span><span
+                                class="detail-row-val val-pos" id="d-fbuy">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Foreign Sell</span><span
+                                class="detail-row-val val-neg" id="d-fsell">—</span></div>
+                        <div class="detail-row"><span class="detail-row-label">Foreign Net</span><span
+                                class="detail-row-val" id="d-fnet">—</span></div>
+                    </div>
+
+                    <div class="detail-section">
+                        <div class="detail-section-title">Top Broker Activity</div>
+                        <div id="d-brokers"></div>
+                    </div>
+
+                    <div class="detail-section">
+                        <div class="detail-section-title">Trend Harga (Simulasi)</div>
+                        <div class="mini-chart-wrap">
+                            <canvas id="detailChart" role="img" aria-label="Mini price trend chart">Price
+                                trend.</canvas>
+                        </div>
+                    </div>
+
+                    <div class="detail-section">
+                        <div class="detail-section-title">Sinyal Bandarmology</div>
+                        <div id="d-signals" style="display:flex;flex-direction:column;gap:6px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
