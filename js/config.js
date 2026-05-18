@@ -6,7 +6,8 @@ const API_CONFIG = {
     BACKEND_URL: 'http://localhost:3000',
     ENDPOINTS: {
         brokerActivity: '/api/broker-activity',
-        marketDetector: '/api/market-detector'
+        marketDetector: '/api/market-detector',
+        brokerRanking: '/api/broker-ranking'
     }
 };
 
@@ -32,5 +33,8 @@ let appState = {
     brokerChartInst: null,
     marketDetectorData: null,
     mdNetChartInst: null,
-    mdTypeChartInst: null
+    mdTypeChartInst: null,
+    dashboardLoaded: false,
+    brokerRankingLoaded: false,
+    brokerRankingData: null
 };

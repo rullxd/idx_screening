@@ -5,19 +5,35 @@
 
 function switchTab(tab) {
     appState.currentPage = tab;
-    ['screener', 'broker', 'heatmap', 'alerts', 'ranking'].forEach(t => {
+    ['dashboard', 'screener', 'broker', 'heatmap', 'alerts', 'ranking', 'stockchart'].forEach(t => {
         const pageEl = document.getElementById('page-' + t);
-        const navEl  = document.getElementById('nav-' + t);
+        const navEl = document.getElementById('nav-' + t);
         if (pageEl) pageEl.style.display = t === tab ? 'block' : 'none';
-        if (navEl)  navEl.classList.toggle('active', t === tab);
+        if (navEl) navEl.classList.toggle('active', t === tab);
     });
+    // Auto-load dashboard saat pertama dibuka
+    if (tab === 'dashboard' && !appState.dashboardLoaded) {
+        appState.dashboardLoaded = true;
+        loadDashboard().then(() => {
+            const tc = document.getElementById('trendCount');
+            const grid = document.getElementById('trendingGrid');
+            if (tc && grid) tc.textContent = grid.children.length + ' saham';
+        });
+    }
+    // Auto-load ranking saat pertama dibuka
+    if (tab === 'ranking' && !appState.brokerRankingLoaded) {
+        appState.brokerRankingLoaded = true;
+        loadRanking();
+    }
+    // Build timeframe buttons when entering stock chart page
+    if (tab === 'stockchart') buildTfButtons();
 }
 
 function switchBrokerSubtab(sub) {
     ['brokerlist', 'marketdetector'].forEach(s => {
-        const el  = document.getElementById('broker-sub-' + s);
+        const el = document.getElementById('broker-sub-' + s);
         const btn = document.getElementById('subtab-' + s);
-        if (el)  el.style.display = s === sub ? 'block' : 'none';
+        if (el) el.style.display = s === sub ? 'block' : 'none';
         if (btn) btn.classList.toggle('active', s === sub);
     });
     // Auto-load Market Detector saat pertama kali dibuka
@@ -42,19 +58,19 @@ function initMarketDetectorAutoLoad() {
 async function loadDataWithFilters() {
     setLoading(true);
     const brokerCode = document.getElementById('filterBrokerCode')?.value?.toUpperCase() || 'AK';
-    const fromDate   = document.getElementById('filterFromDate')?.value || '';
-    const toDate     = document.getElementById('filterToDate')?.value   || '';
+    const fromDate = document.getElementById('filterFromDate')?.value || '';
+    const toDate = document.getElementById('filterToDate')?.value || '';
 
     console.log(`📊 Loading data — Broker: ${brokerCode}, From: ${fromDate}, To: ${toDate}`);
 
     const params = { brokerCode };
     if (fromDate) params.fromDate = fromDate;
-    if (toDate)   params.toDate   = toDate;
+    if (toDate) params.toDate = toDate;
 
     const brokerData = await fetchBrokerActivity(params);
     if (brokerData) {
         const processedData = processRawBrokerData(brokerData);
-        appState.allData      = processedData;
+        appState.allData = processedData;
         appState.filteredData = [...processedData];
         renderTable();
         showSuccess(`✅ Data loaded: ${processedData.length} stocks dari broker ${brokerCode}`);

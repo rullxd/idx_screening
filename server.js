@@ -135,6 +135,139 @@ app.get('/api/market-detector/:stockCode', async (req, res) => {
     }
 });
 
+// API Proxy Endpoint — IHSG Orderbook
+app.get('/api/ihsg', async (req, res) => {
+    try {
+        const url = 'https://exodus.stockbit.com/company-price-feed/v2/orderbook/companies/IHSG';
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('❌ IHSG Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API Proxy Endpoint — Trending Stocks
+app.get('/api/trending', async (req, res) => {
+    try {
+        const url = 'https://exodus.stockbit.com/emitten/trending';
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('❌ Trending Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API Proxy Endpoint — Stock Chart (per symbol & timeframe)
+app.get('/api/stock-chart', async (req, res) => {
+    try {
+        const { symbol = 'IHSG', timeframe = 'today' } = req.query;
+        const url = `https://exodus.stockbit.com/charts/${encodeURIComponent(symbol.toUpperCase())}/daily?timeframe=${encodeURIComponent(timeframe)}`;
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('❌ Stock Chart Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API Proxy Endpoint — IHSG Intraday Chart
+app.get('/api/ihsg-chart', async (req, res) => {
+    try {
+        const url = 'https://exodus.stockbit.com/charts/IHSG/daily?timeframe=today';
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('❌ IHSG Chart Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API Proxy Endpoint — Broker Ranking
+app.get('/api/broker-ranking', async (req, res) => {
+    try {
+        const {
+            sort = 'TB_SORT_BY_TOTAL_VALUE',
+            order = 'ORDER_BY_DESC',
+            market_type = 'MARKET_TYPE_ALL',
+            eod_only = true,
+            from,
+            to
+        } = req.query;
+
+        const queryParams = new URLSearchParams({
+            sort,
+            order,
+            market_type,
+            eod_only
+        });
+
+        if (from) queryParams.append('from', from);
+        if (to) queryParams.append('to', to);
+
+        const apiUrl = `https://exodus.stockbit.com/order-trade/broker/top?${queryParams}`;
+        console.log(`📡 Broker ranking proxy: ${apiUrl.substring(0, 120)}...`);
+
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'Accept': 'application/json, text/plain, */*',
+                'Origin': 'https://stockbit.com',
+                'Referer': 'https://stockbit.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`API returned HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log(`✅ Broker ranking fetched: ${data?.data?.list?.length || 0} brokers`);
+        res.json(data);
+    } catch (error) {
+        console.error('❌ Broker Ranking Proxy Error:', error.message);
+        res.status(500).json({
+            error: error.message,
+            message: 'Failed to fetch broker ranking data'
+        });
+    }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });

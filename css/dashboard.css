@@ -1,0 +1,398 @@
+/* ==============================================
+   DASHBOARD — IHSG Hero Card + Trending Grid
+   ============================================== */
+
+/* ----- PAGE LAYOUT ----- */
+.db-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text2);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    padding: 40px;
+    justify-content: center;
+}
+
+/* ----- IHSG HERO CARD ----- */
+#ihsgCard {
+    background: linear-gradient(135deg, var(--bg2) 0%, #0d1829 100%);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+#ihsgCard::before {
+    content: 'IHSG';
+    position: absolute;
+    right: -10px;
+    top: -20px;
+    font-size: 120px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    color: rgba(255,255,255,0.02);
+    pointer-events: none;
+    user-select: none;
+}
+
+.ihsg-hero {
+    display: flex;
+    gap: 32px;
+    margin-bottom: 20px;
+}
+
+/* Left: price info */
+.ihsg-left { flex: 1; }
+
+.ihsg-label {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ihsg-exchange {
+    background: var(--blue2);
+    color: var(--blue);
+    border: 1px solid rgba(59,130,246,0.3);
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+.ihsg-price {
+    font-size: 48px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 8px;
+    letter-spacing: -1px;
+}
+
+.ihsg-change {
+    font-size: 20px;
+    font-weight: 600;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 14px;
+}
+
+.ihsg-change.pos { color: var(--green); }
+.ihsg-change.neg { color: var(--red); }
+.ihsg-change.neu { color: var(--text2); }
+
+.ihsg-ohlv {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text2);
+}
+
+.ihsg-ohlv b { color: var(--text); }
+.ihsg-ohlv b.pos { color: var(--green); }
+.ihsg-ohlv b.neg { color: var(--red); }
+
+/* Right: breadth + foreign */
+.ihsg-right {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 260px;
+}
+
+/* Breadth (naik/tetap/turun) */
+.ihsg-breadth {
+    display: flex;
+    gap: 8px;
+}
+
+.breadth-item {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+.breadth-item.pos { background: var(--green2); border-color: rgba(0,229,160,0.2); }
+.breadth-item.neg { background: var(--red2);   border-color: rgba(255,77,109,0.2); }
+.breadth-item.neu { background: var(--bg3);    border-color: var(--border); }
+
+.breadth-val {
+    font-size: 22px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+}
+
+.breadth-item.pos .breadth-val { color: var(--green); }
+.breadth-item.neg .breadth-val { color: var(--red); }
+.breadth-item.neu .breadth-val { color: var(--text2); }
+
+.breadth-lbl { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* Foreign flow */
+.ihsg-foreign {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+.ihsg-section-title {
+    font-size: 10px;
+    color: var(--text3);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+
+.foreign-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 3px 0;
+    font-family: 'Space Mono', monospace;
+}
+
+.foreign-label { color: var(--text2); }
+
+.foreign-pct-bar { margin-top: 10px; }
+
+.fpct-track {
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--bg2);
+    margin: 4px 0;
+}
+
+.fpct-fill-dom { background: var(--purple); height: 100%; }
+.fpct-fill-for { background: var(--blue); height: 100%; }
+
+.fpct-label {
+    font-size: 10px;
+    color: var(--text3);
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Space Mono', monospace;
+}
+
+/* Market Summary Table */
+.ihsg-mktdata {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+}
+
+.ihsg-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.ihsg-table th {
+    text-align: left;
+    font-size: 10px;
+    color: var(--text3);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    background: transparent;
+    cursor: default;
+    position: static;
+}
+
+.ihsg-table td {
+    padding: 7px 8px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+}
+
+.ihsg-table tr:first-child td {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* Value classes (reuse) */
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+.neu { color: var(--text2); }
+
+/* ----- TRENDING SECTION ----- */
+.trending-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.trending-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.trending-refresh {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.trending-refresh:hover { color: var(--text); border-color: var(--border2); }
+
+#trendingGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.trend-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.trend-card:hover {
+    background: var(--bg3);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+.trend-card-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.trend-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.trend-icon-fallback {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text2);
+    font-family: 'Space Mono', monospace;
+    flex-shrink: 0;
+}
+
+.trend-info { min-width: 0; }
+
+.trend-symbol {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.trend-name {
+    font-size: 10px;
+    color: var(--text3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 110px;
+    margin-top: 2px;
+}
+
+.trend-notation {
+    width: 12px;
+    height: 12px;
+    object-fit: contain;
+}
+
+.trend-corp { font-size: 10px; }
+
+.trend-card-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+
+.trend-price {
+    font-family: 'Space Mono', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.trend-chg {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 600;
+    text-align: right;
+}
+
+.trend-chg.pos { color: var(--green); }
+.trend-chg.neg { color: var(--red); }
+.trend-chg.neu { color: var(--text2); }
+
+/* ----- IHSG INTRADAY CHART CARD ----- */
+.ihsg-chart-card {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+
+.ihsg-chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.ihsg-chart-wrap {
+    position: relative;
+    height: 200px;
+    width: 100%;
+}
+
+.ihsg-chart-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .ihsg-hero { flex-direction: column; }
+    .ihsg-right { min-width: 100%; }
+    .ihsg-price { font-size: 36px; }
+}
