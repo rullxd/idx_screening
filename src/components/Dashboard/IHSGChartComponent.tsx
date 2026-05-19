@@ -1,9 +1,22 @@
+import { useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { useIHSGChart } from '@/hooks/use-queries'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 
+const TIMEFRAMES = [
+    { value: '1d', label: '1D' },
+    { value: '1w', label: '1W' },
+    { value: '1m', label: '1M' },
+    { value: '3m', label: '3M' },
+    { value: 'ytd', label: 'YTD' },
+    { value: '1y', label: '1Y' },
+    { value: '3y', label: '3Y' },
+    { value: '5y', label: '5Y' },
+]
+
 export default function IHSGChartComponent() {
-    const { data, isLoading, error, refetch } = useIHSGChart()
+    const [selectedTimeframe, setSelectedTimeframe] = useState('1d')
+    const { data, isLoading, error, refetch } = useIHSGChart(selectedTimeframe)
 
     if (isLoading) return <LoadingSpinner />
     if (error) return <ErrorState title="Error" message="Failed to load chart data" onRetry={() => refetch()} />
@@ -68,12 +81,28 @@ export default function IHSGChartComponent() {
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h3 className="text-lg font-semibold text-dark-100">📈 IHSG Intraday Chart</h3>
-                        <p className="text-xs text-dark-500 mt-1">Hari ini • {chartData.length} data points</p>
+                        <h3 className="text-lg font-semibold text-dark-100">📈 IHSG Chart</h3>
+                        <p className="text-xs text-dark-500 mt-1">Timeframe: {selectedTimeframe.toUpperCase()} • {chartData.length} data points</p>
                     </div>
                     <div className={`text-right font-semibold ${trendColor}`}>
                         {trend === 'naik' ? '📈' : trend === 'turun' ? '📉' : '➡️'} {trend.toUpperCase()}
                     </div>
+                </div>
+
+                {/* Timeframe Selector */}
+                <div className="mb-4 flex flex-wrap gap-2">
+                    {TIMEFRAMES.map((tf) => (
+                        <button
+                            key={tf.value}
+                            onClick={() => setSelectedTimeframe(tf.value)}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${selectedTimeframe === tf.value
+                                    ? 'bg-accent-blue text-white'
+                                    : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                                }`}
+                        >
+                            {tf.label}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Statistics Summary */}

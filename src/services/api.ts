@@ -200,6 +200,7 @@ export async function fetchScreeningData(
 
 export async function fetchIHSGChart(params?: {
     period?: string
+    timeframe?: string
     fromDate?: string
     toDate?: string
 }): Promise<IHSGChartResponse> {

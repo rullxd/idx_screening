@@ -60,23 +60,40 @@ export function useScreening(
 
 // ============= IHSG CHART HOOK =============
 
+// Map timeframe to period
+function getChartPeriod(timeframe: string): string {
+    const periodMap: Record<string, string> = {
+        '1d': 'intraday',
+        '1w': 'weekly',
+        '1m': 'monthly',
+        '3m': '3month',
+        'ytd': 'ytd',
+        '1y': 'yearly',
+        '3y': '3year',
+        '5y': '5year',
+    }
+    return periodMap[timeframe] || 'intraday'
+}
+
 export function useIHSGChart(
+    timeframe: string = '1d',
     options?: { enabled?: boolean; refetchInterval?: number }
 ): UseQueryResult<any, APIException> {
     return useQuery({
-        queryKey: ['ihsg', 'chart'],
+        queryKey: ['ihsg', 'chart', timeframe],
         queryFn: async () => {
             const data = await fetchIHSGChart({
-                period: 'intraday',
+                period: getChartPeriod(timeframe),
+                timeframe: timeframe,
             })
             return data
         },
-        staleTime: 2 * 60 * 1000, // 2 minutes
-        gcTime: 5 * 60 * 1000,
+        staleTime: 5 * 1000, // 5 seconds - reduced from 2 minutes for timeframe switching
+        gcTime: 10 * 1000, // 10 seconds
         retry: 2,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
         enabled: options?.enabled !== false,
-        refetchInterval: options?.refetchInterval || 30000, // Default refresh every 30s
+        refetchInterval: options?.refetchInterval,
     })
 }
 

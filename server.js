@@ -19,7 +19,7 @@ const CACHE_TTL = {
     ihsg: 30 * 1000,
     trending: 30 * 1000,
     stockChart: 45 * 1000,
-    ihsgChart: 30 * 1000,
+    ihsgChart: 5 * 1000,  // Reduced from 30s to 5s for faster timeframe switching
     brokerRanking: 5 * 60 * 1000
 };
 
@@ -242,12 +242,38 @@ app.get('/api/stock-chart', async (req, res) => {
 // API Proxy Endpoint — IHSG Intraday Chart
 app.get('/api/ihsg-chart', async (req, res) => {
     try {
-        const url = 'https://exodus.stockbit.com/charts/IHSG/daily?timeframe=today';
+        const { period, timeframe } = req.query;
+
+        // Map period/timeframe to stockbit timeframe param
+        const timeframeMap = {
+            '1d': 'today',
+            'intraday': 'today',
+            '1w': 'weekly',
+            'weekly': 'weekly',
+            '1m': '1m',
+            'monthly': '1m',
+            '3m': '3m',
+            '3month': '3m',
+            'ytd': 'ytd',
+            '1y': '1y',
+            'yearly': '1y',
+            '3y': '3y',
+            '3year': '3y',
+            '5y': '5y',
+            '5year': '5y',
+        };
+
+        // Use timeframe param first, fallback to period, default to 'today'
+        const selectedTimeframe = timeframeMap[timeframe || period || '1d'] || 'today';
+
+        const url = `https://exodus.stockbit.com/charts/IHSG/daily?timeframe=${selectedTimeframe}`;
+        console.log(`🔗 IHSG Chart URL: ${url}`);
+
         const { data, cacheHit } = await fetchJsonWithCache({
             cacheKey: url,
             ttlMs: CACHE_TTL.ihsgChart,
             url,
-            logLabel: 'IHSG intraday chart',
+            logLabel: `IHSG chart (timeframe=${selectedTimeframe})`,
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'User-Agent': 'Mozilla/5.0',
