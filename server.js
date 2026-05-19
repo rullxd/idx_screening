@@ -1,10 +1,52 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const app = express();
 const PORT = 3000;
+
+// Get __dirname in ES module
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const responseCache = new Map();
+const CACHE_TTL = {
+    brokerActivity: 60 * 1000,
+    marketDetector: 60 * 1000,
+    ihsg: 30 * 1000,
+    trending: 30 * 1000,
+    stockChart: 45 * 1000,
+    ihsgChart: 30 * 1000,
+    brokerRanking: 5 * 60 * 1000
+};
+
+async function fetchJsonWithCache({ cacheKey, ttlMs, url, headers, logLabel }) {
+    const now = Date.now();
+    const cached = responseCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+        console.log(`♻️ Cache hit: ${logLabel}`);
+        return { data: cached.data, cacheHit: true };
+    }
+
+    if (cached) responseCache.delete(cacheKey);
+
+    console.log(`📡 Cache miss: ${logLabel}`);
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+        throw new Error(`API returned HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    responseCache.set(cacheKey, {
+        data,
+        expiresAt: now + ttlMs
+    });
+
+    return { data, cacheHit: false };
+}
 
 // Middleware
 app.use(cors());
@@ -50,11 +92,11 @@ app.get('/api/broker-activity', async (req, res) => {
         if (to) queryParams.append('to', to);
 
         const apiUrl = `https://exodus.stockbit.com/order-trade/broker/activity?${queryParams}`;
-
-        console.log(`📡 Proxying request: ${apiUrl.substring(0, 100)}...`);
-
-        const response = await fetch(apiUrl, {
-            method: 'GET',
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: apiUrl,
+            ttlMs: CACHE_TTL.brokerActivity,
+            url: apiUrl,
+            logLabel: 'broker activity',
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'Accept': 'application/json, text/plain, */*',
@@ -64,11 +106,7 @@ app.get('/api/broker-activity', async (req, res) => {
             }
         });
 
-        if (!response.ok) {
-            throw new Error(`API returned HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
         console.log(`✅ Data fetched: ${data?.data?.broker_activity_transaction?.brokers_buy?.length || 0} items`);
 
         res.json(data);
@@ -105,10 +143,11 @@ app.get('/api/market-detector/:stockCode', async (req, res) => {
         if (to) queryParams.append('to', to);
 
         const apiUrl = `https://exodus.stockbit.com/marketdetectors/${stockCode.toUpperCase()}?${queryParams}`;
-        console.log(`📡 MarketDetector proxy: ${apiUrl.substring(0, 120)}...`);
-
-        const response = await fetch(apiUrl, {
-            method: 'GET',
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: apiUrl,
+            ttlMs: CACHE_TTL.marketDetector,
+            url: apiUrl,
+            logLabel: `market detector ${stockCode.toUpperCase()}`,
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'Accept': 'application/json, text/plain, */*',
@@ -118,12 +157,7 @@ app.get('/api/market-detector/:stockCode', async (req, res) => {
             }
         });
 
-        if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(`API returned HTTP ${response.status}: ${errBody.substring(0, 200)}`);
-        }
-
-        const data = await response.json();
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
         console.log(`✅ MarketDetector fetched for ${stockCode}: ${JSON.stringify(data).substring(0, 80)}...`);
         res.json(data);
     } catch (error) {
@@ -139,15 +173,18 @@ app.get('/api/market-detector/:stockCode', async (req, res) => {
 app.get('/api/ihsg', async (req, res) => {
     try {
         const url = 'https://exodus.stockbit.com/company-price-feed/v2/orderbook/companies/IHSG';
-        const response = await fetch(url, {
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: url,
+            ttlMs: CACHE_TTL.ihsg,
+            url,
+            logLabel: 'IHSG orderbook',
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'User-Agent': 'Mozilla/5.0',
                 'Accept': 'application/json'
             }
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
         res.json(data);
     } catch (error) {
         console.error('❌ IHSG Proxy Error:', error.message);
@@ -159,15 +196,18 @@ app.get('/api/ihsg', async (req, res) => {
 app.get('/api/trending', async (req, res) => {
     try {
         const url = 'https://exodus.stockbit.com/emitten/trending';
-        const response = await fetch(url, {
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: url,
+            ttlMs: CACHE_TTL.trending,
+            url,
+            logLabel: 'trending stocks',
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'User-Agent': 'Mozilla/5.0',
                 'Accept': 'application/json'
             }
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
         res.json(data);
     } catch (error) {
         console.error('❌ Trending Proxy Error:', error.message);
@@ -180,15 +220,18 @@ app.get('/api/stock-chart', async (req, res) => {
     try {
         const { symbol = 'IHSG', timeframe = 'today' } = req.query;
         const url = `https://exodus.stockbit.com/charts/${encodeURIComponent(symbol.toUpperCase())}/daily?timeframe=${encodeURIComponent(timeframe)}`;
-        const response = await fetch(url, {
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: url,
+            ttlMs: CACHE_TTL.stockChart,
+            url,
+            logLabel: `stock chart ${symbol.toUpperCase()} ${timeframe}`,
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'User-Agent': 'Mozilla/5.0',
                 'Accept': 'application/json'
             }
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
         res.json(data);
     } catch (error) {
         console.error('❌ Stock Chart Proxy Error:', error.message);
@@ -200,15 +243,18 @@ app.get('/api/stock-chart', async (req, res) => {
 app.get('/api/ihsg-chart', async (req, res) => {
     try {
         const url = 'https://exodus.stockbit.com/charts/IHSG/daily?timeframe=today';
-        const response = await fetch(url, {
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: url,
+            ttlMs: CACHE_TTL.ihsgChart,
+            url,
+            logLabel: 'IHSG intraday chart',
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'User-Agent': 'Mozilla/5.0',
                 'Accept': 'application/json'
             }
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
         res.json(data);
     } catch (error) {
         console.error('❌ IHSG Chart Proxy Error:', error.message);
@@ -239,10 +285,11 @@ app.get('/api/broker-ranking', async (req, res) => {
         if (to) queryParams.append('to', to);
 
         const apiUrl = `https://exodus.stockbit.com/order-trade/broker/top?${queryParams}`;
-        console.log(`📡 Broker ranking proxy: ${apiUrl.substring(0, 120)}...`);
-
-        const response = await fetch(apiUrl, {
-            method: 'GET',
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: apiUrl,
+            ttlMs: CACHE_TTL.brokerRanking,
+            url: apiUrl,
+            logLabel: 'broker ranking',
             headers: {
                 'Authorization': `Bearer ${TOKEN}`,
                 'Accept': 'application/json, text/plain, */*',
@@ -252,11 +299,7 @@ app.get('/api/broker-ranking', async (req, res) => {
             }
         });
 
-        if (!response.ok) {
-            throw new Error(`API returned HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
         console.log(`✅ Broker ranking fetched: ${data?.data?.list?.length || 0} brokers`);
         res.json(data);
     } catch (error) {
