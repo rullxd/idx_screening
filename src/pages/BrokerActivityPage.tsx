@@ -7,7 +7,12 @@ export default function BrokerActivityPage() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-dark-100">🏦 Broker Activity</h1>
+            <div>
+                <h1 className="text-3xl font-bold text-dark-100">🏦 Broker Activity</h1>
+                <p className="text-dark-400 text-sm mt-1">
+                    Aktivitas transaksi broker & analisis bandar per saham
+                </p>
+            </div>
 
             {/* Tabs */}
             <div className="flex gap-2 border-b border-dark-800">

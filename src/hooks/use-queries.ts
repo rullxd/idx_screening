@@ -1,8 +1,11 @@
 import { useQuery, UseQueryResult } from '@tanstack/react-query'
 import {
     fetchBrokerRanking,
+    fetchBrokerActivity,
     fetchScreeningData,
     fetchIHSGChart,
+    fetchOrderbook,
+    fetchStockChart,
     fetchTrendingStocks,
     fetchMarketDetector,
 } from '@/services/api'
@@ -33,6 +36,29 @@ export function useBrokerRanking(
         retry: 2,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
         enabled: options?.enabled !== false,
+        refetchInterval: options?.refetchInterval,
+    })
+}
+
+// ============= BROKER ACTIVITY HOOK =============
+
+export function useBrokerActivity(
+    brokerCode: string,
+    options?: { enabled?: boolean; limit?: number; refetchInterval?: number }
+): UseQueryResult<any, APIException> {
+    const code = brokerCode.trim().toUpperCase()
+    return useQuery({
+        queryKey: ['broker', 'activity', code, options?.limit],
+        queryFn: async () =>
+            fetchBrokerActivity({
+                brokerCode: code,
+                limit: options?.limit ?? 50,
+            }),
+        staleTime: 60 * 1000,
+        gcTime: 5 * 60 * 1000,
+        retry: 2,
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        enabled: options?.enabled !== false && code.length >= 2,
         refetchInterval: options?.refetchInterval,
     })
 }
@@ -93,6 +119,46 @@ export function useIHSGChart(
         retry: 2,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
         enabled: options?.enabled !== false,
+        refetchInterval: options?.refetchInterval,
+    })
+}
+
+// ============= ORDERBOOK HOOK =============
+
+export function useOrderbook(
+    symbol: string,
+    options?: { enabled?: boolean; refetchInterval?: number }
+): UseQueryResult<any, APIException> {
+    return useQuery({
+        queryKey: ['orderbook', symbol],
+        queryFn: async () => fetchOrderbook(symbol),
+        staleTime: 3 * 1000,
+        gcTime: 10 * 1000,
+        retry: 2,
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        enabled: options?.enabled !== false && !!symbol,
+        refetchInterval: options?.refetchInterval ?? 10 * 1000,
+    })
+}
+
+// ============= STOCK CHART HOOK =============
+
+export function useStockChart(
+    symbol: string,
+    timeframe: string = '1d',
+    options?: { enabled?: boolean; refetchInterval?: number }
+): UseQueryResult<any, APIException> {
+    return useQuery({
+        queryKey: ['stock', 'chart', symbol, timeframe],
+        queryFn: async () => {
+            const data = await fetchStockChart(symbol, { timeframe })
+            return data
+        },
+        staleTime: 5 * 1000,
+        gcTime: 10 * 1000,
+        retry: 2,
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        enabled: options?.enabled !== false && !!symbol,
         refetchInterval: options?.refetchInterval,
     })
 }

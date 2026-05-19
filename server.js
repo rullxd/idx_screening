@@ -17,6 +17,7 @@ const CACHE_TTL = {
     brokerActivity: 60 * 1000,
     marketDetector: 60 * 1000,
     ihsg: 30 * 1000,
+    orderbook: 5 * 1000,
     trending: 30 * 1000,
     stockChart: 45 * 1000,
     ihsgChart: 5 * 1000,  // Reduced from 30s to 5s for faster timeframe switching
@@ -166,6 +167,30 @@ app.get('/api/market-detector/:stockCode', async (req, res) => {
             error: error.message,
             message: 'Failed to fetch market detector data'
         });
+    }
+});
+
+// API Proxy Endpoint — Stock Orderbook (per symbol)
+app.get('/api/orderbook', async (req, res) => {
+    try {
+        const symbol = String(req.query.symbol || 'BBRI').toUpperCase();
+        const url = `https://exodus.stockbit.com/company-price-feed/v2/orderbook/companies/${encodeURIComponent(symbol)}`;
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: url,
+            ttlMs: CACHE_TTL.orderbook,
+            url,
+            logLabel: `orderbook ${symbol}`,
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
+        res.json(data);
+    } catch (error) {
+        console.error('❌ Orderbook Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 

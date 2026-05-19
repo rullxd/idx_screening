@@ -1,131 +1,134 @@
-import { useBrokerRanking } from '@/hooks/use-queries'
-import { formatBigNumber, formatCurrency } from '@/services/api'
+import { useState } from 'react'
+import { useBrokerActivity } from '@/hooks/use-queries'
+import { formatCurrency } from '@/services/api'
+import { parseBrokerActivity } from '@/utils/broker-activity'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
+import StockTransactionList from './StockTransactionList'
+
+const POPULAR_BROKERS = ['AK', 'CC', 'YP', 'MG', 'XL', 'PD', 'NI', 'ZP']
 
 export default function BrokerActivityList() {
-    const { data, isLoading, error, refetch } = useBrokerRanking()
+    const [inputCode, setInputCode] = useState('AK')
+    const [brokerCode, setBrokerCode] = useState('AK')
 
-    if (isLoading) return <LoadingSpinner />
-    if (error) return <ErrorState title="Error" message="Failed to load broker activity" onRetry={() => refetch()} />
+    const { data, isLoading, error, refetch, isFetching } = useBrokerActivity(brokerCode)
 
-    const brokers = Array.isArray(data)
-        ? data
-        : (data?.data?.list || data?.list || data?.data || [])
+    const applyBroker = (code?: string) => {
+        const next = (code || inputCode).trim().toUpperCase()
+        if (next.length < 2) return
+        setBrokerCode(next)
+        setInputCode(next)
+    }
 
-    // Top buyers and sellers
-    const topBuyers = [...brokers]
-        .sort((a, b) => (b.buy_value || 0) - (a.buy_value || 0))
-        .slice(0, 10)
+    const { buys, sells, date } = parseBrokerActivity(data ?? {})
 
-    const topSellers = [...brokers]
-        .sort((a, b) => (b.sell_value || 0) - (a.sell_value || 0))
-        .slice(0, 10)
-
-    // Calculate stats
-    const totalBuyValue = brokers.reduce((sum: number, b: any) => sum + (b.buy_value || 0), 0)
-    const totalSellValue = brokers.reduce((sum: number, b: any) => sum + (b.sell_value || 0), 0)
-    const totalVolume = brokers.reduce((sum: number, b: any) => sum + (b.total_volume || 0), 0)
-    const netFlow = totalBuyValue - totalSellValue
-    const foreignBrokers = brokers.filter((b: any) => b.group?.includes('FOREIGN')).length
-    const localBrokers = brokers.filter((b: any) => !b.group?.includes('FOREIGN')).length
+    const totalBuy = buys.reduce((s, r) => s + r.value, 0)
+    const totalSell = sells.reduce((s, r) => s + r.value, 0)
+    const netFlow = totalBuy - totalSell
 
     return (
         <div className="space-y-6">
-            {/* Summary Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-                <Card className="p-3 bg-dark-800">
-                    <p className="text-dark-400 text-xs">TOTAL BUY</p>
-                    <p className="text-accent-green font-bold text-lg mt-1">{formatCurrency(totalBuyValue)}</p>
-                </Card>
-                <Card className="p-3 bg-dark-800">
-                    <p className="text-dark-400 text-xs">TOTAL SELL</p>
-                    <p className="text-accent-red font-bold text-lg mt-1">{formatCurrency(totalSellValue)}</p>
-                </Card>
-                <Card className="p-3 bg-dark-800">
-                    <p className="text-dark-400 text-xs">NET FLOW</p>
-                    <p className={`font-bold text-lg mt-1 ${netFlow >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>{formatCurrency(netFlow)}</p>
-                </Card>
-                <Card className="p-3 bg-dark-800">
-                    <p className="text-dark-400 text-xs">VOLUME</p>
-                    <p className="text-accent-blue font-bold text-lg mt-1">{formatBigNumber(totalVolume)}</p>
-                </Card>
-                <Card className="p-3 bg-dark-800">
-                    <p className="text-dark-400 text-xs">BROKERS</p>
-                    <p className="text-dark-100 font-bold text-lg mt-1">{brokers.length} ({foreignBrokers}F {localBrokers}L)</p>
-                </Card>
-            </div>
+            <Card className="p-4">
+                <p className="text-sm text-dark-400 mb-3">
+                    Lihat saham yang dibeli & dijual oleh broker tertentu (data transaksi harian).
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                        type="text"
+                        value={inputCode}
+                        onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => e.key === 'Enter' && applyBroker()}
+                        placeholder="Kode broker, mis. AK"
+                        className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
+                    />
+                    <button
+                        type="button"
+                        onClick={() => applyBroker()}
+                        className="px-6 py-2.5 bg-accent-green text-dark-950 font-semibold rounded-lg hover:bg-opacity-90 transition"
+                    >
+                        Tampilkan
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => refetch()}
+                        className="px-4 py-2.5 border border-dark-700 rounded-lg text-dark-300 hover:bg-dark-800 transition"
+                    >
+                        ⟳ Refresh
+                    </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    {POPULAR_BROKERS.map((code) => (
+                        <button
+                            key={code}
+                            type="button"
+                            onClick={() => applyBroker(code)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                                brokerCode === code
+                                    ? 'border-accent-green text-accent-green bg-accent-green/10'
+                                    : 'border-dark-700 text-dark-300 hover:border-dark-500'
+                            }`}
+                        >
+                            {code}
+                        </button>
+                    ))}
+                </div>
+            </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Top Buyers */}
-                <Card className="p-6">
-                    <h3 className="text-lg font-semibold text-dark-100 mb-4">🟢 Top Buyer</h3>
-                    <div className="space-y-3">
-                        {topBuyers.map((broker, idx) => (
-                            <div key={broker.code} className="p-3 bg-dark-800 rounded-lg border border-dark-700 hover:border-accent-green transition">
-                                <div className="flex items-start justify-between mb-2">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-bold text-dark-400 w-6 h-6 flex items-center justify-center bg-dark-700 rounded-full">
-                                                {idx + 1}
-                                            </span>
-                                            <span className="font-bold text-accent-green">{broker.code}</span>
-                                        </div>
-                                        <p className="text-xs text-dark-400 mt-1">{broker.name}</p>
-                                    </div>
-                                    <span className={`text-xs px-2 py-1 rounded ${broker.group === 'FOREIGN' ? 'bg-accent-blue bg-opacity-20 text-accent-blue' : 'bg-accent-yellow bg-opacity-20 text-accent-yellow'}`}>
-                                        {broker.group === 'FOREIGN' ? '🌍' : '🏠'}
-                                    </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                        <p className="text-dark-500">Buy Value</p>
-                                        <p className="font-semibold text-accent-green">{formatCurrency(broker.buy_value || 0)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-dark-500">Volume</p>
-                                        <p className="font-semibold text-dark-200">{formatBigNumber(broker.total_volume || 0)}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+            {isLoading ? (
+                <LoadingSpinner message={`Memuat aktivitas broker ${brokerCode}...`} />
+            ) : error ? (
+                <ErrorState
+                    title="Gagal memuat data"
+                    message={error.message || `Tidak dapat memuat aktivitas broker ${brokerCode}`}
+                    onRetry={() => refetch()}
+                />
+            ) : (
+                <>
+                    <div className="flex items-center justify-between text-sm text-dark-500">
+                        <span>
+                            Broker <strong className="text-dark-200">{brokerCode}</strong>
+                            {date && ` · ${date}`}
+                        </span>
+                        {isFetching && <span className="animate-pulse">memperbarui…</span>}
                     </div>
-                </Card>
 
-                {/* Top Sellers */}
-                <Card className="p-6">
-                    <h3 className="text-lg font-semibold text-dark-100 mb-4">🔴 Top Seller</h3>
-                    <div className="space-y-3">
-                        {topSellers.map((broker, idx) => (
-                            <div key={broker.code} className="p-3 bg-dark-800 rounded-lg border border-dark-700 hover:border-accent-red transition">
-                                <div className="flex items-start justify-between mb-2">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-bold text-dark-400 w-6 h-6 flex items-center justify-center bg-dark-700 rounded-full">
-                                                {idx + 1}
-                                            </span>
-                                            <span className="font-bold text-accent-red">{broker.code}</span>
-                                        </div>
-                                        <p className="text-xs text-dark-400 mt-1">{broker.name}</p>
-                                    </div>
-                                    <span className={`text-xs px-2 py-1 rounded ${broker.group === 'FOREIGN' ? 'bg-accent-blue bg-opacity-20 text-accent-blue' : 'bg-accent-yellow bg-opacity-20 text-accent-yellow'}`}>
-                                        {broker.group === 'FOREIGN' ? '🌍' : '🏠'}
-                                    </span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div>
-                                        <p className="text-dark-500">Sell Value</p>
-                                        <p className="font-semibold text-accent-red">{formatCurrency(broker.sell_value || 0)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-dark-500">Volume</p>
-                                        <p className="font-semibold text-dark-200">{formatBigNumber(broker.total_volume || 0)}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <SummaryCard label="Total Beli" value={formatCurrency(totalBuy)} className="text-accent-green" />
+                        <SummaryCard label="Total Jual" value={formatCurrency(totalSell)} className="text-accent-red" />
+                        <SummaryCard
+                            label="Net Flow"
+                            value={formatCurrency(netFlow)}
+                            className={netFlow >= 0 ? 'text-accent-green' : 'text-accent-red'}
+                        />
+                        <SummaryCard
+                            label="Saham"
+                            value={`${buys.length} beli · ${sells.length} jual`}
+                        />
                     </div>
-                </Card>
-            </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <StockTransactionList title="🟢 Saham Dibeli" items={buys} side="buy" />
+                        <StockTransactionList title="🔴 Saham Dijual" items={sells} side="sell" />
+                    </div>
+                </>
+            )}
         </div>
+    )
+}
+
+function SummaryCard({
+    label,
+    value,
+    className,
+}: {
+    label: string
+    value: string
+    className?: string
+}) {
+    return (
+        <Card className="p-3">
+            <p className="text-dark-400 text-xs uppercase tracking-wide">{label}</p>
+            <p className={`font-bold text-lg mt-1 tabular-nums ${className || 'text-dark-100'}`}>{value}</p>
+        </Card>
     )
 }

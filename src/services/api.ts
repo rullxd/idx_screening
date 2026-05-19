@@ -38,16 +38,26 @@ export async function fetchBrokerRanking(
 }
 
 export async function fetchBrokerActivity(params?: {
-    brokerCode: string
+    brokerCode?: string
+    limit?: number
     fromDate?: string
     toDate?: string
     transactionType?: string
     investorType?: string
     marketBoard?: string
 }): Promise<any> {
+    const brokerCode = (params?.brokerCode || 'AK').toUpperCase()
     return apiClient.get('/broker-activity', {
-        params,
-        cancelKey: 'broker-activity',
+        params: {
+            broker_code: brokerCode,
+            limit: params?.limit ?? 50,
+            transaction_type: params?.transactionType ?? 'TRANSACTION_TYPE_NET',
+            investor_type: params?.investorType ?? 'INVESTOR_TYPE_ALL',
+            market_board: params?.marketBoard ?? 'MARKET_TYPE_REGULER',
+            ...(params?.fromDate ? { from: params.fromDate } : {}),
+            ...(params?.toDate ? { to: params.toDate } : {}),
+        },
+        cancelKey: `broker-activity-${brokerCode}`,
     })
 }
 
@@ -198,6 +208,13 @@ export async function fetchScreeningData(
 
 // ============= CHART ENDPOINTS =============
 
+export async function fetchOrderbook(symbol: string): Promise<any> {
+    return apiClient.get('/orderbook', {
+        params: { symbol: symbol.toUpperCase() },
+        cancelKey: `orderbook-${symbol.toUpperCase()}`,
+    })
+}
+
 export async function fetchIHSGChart(params?: {
     period?: string
     timeframe?: string
@@ -212,11 +229,32 @@ export async function fetchIHSGChart(params?: {
 
 export async function fetchStockChart(
     stockCode: string,
-    params?: { period?: string; fromDate?: string; toDate?: string }
+    params?: { timeframe?: string; period?: string }
 ): Promise<StockChartResponse> {
-    return apiClient.get(`/stock-chart/${stockCode}`, {
-        params,
-        cancelKey: `stock-chart-${stockCode}`,
+    const timeframeMap: Record<string, string> = {
+        '1d': 'today',
+        intraday: 'today',
+        '1w': 'weekly',
+        weekly: 'weekly',
+        '1m': '1m',
+        monthly: '1m',
+        '3m': '3m',
+        '3month': '3m',
+        ytd: 'ytd',
+        '1y': '1y',
+        yearly: '1y',
+        '3y': '3y',
+        '3year': '3y',
+        '5y': '5y',
+        '5year': '5y',
+        today: 'today',
+    }
+    const timeframe =
+        timeframeMap[params?.timeframe || params?.period || '1d'] || params?.timeframe || 'today'
+
+    return apiClient.get('/stock-chart', {
+        params: { symbol: stockCode.toUpperCase(), timeframe },
+        cancelKey: `stock-chart-${stockCode}-${timeframe}`,
     })
 }
 

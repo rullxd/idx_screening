@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useUIStore } from '@/stores/ui-store'
 import Layout from '@/components/Layout'
 import DashboardPage from '@/pages/DashboardPage'
+import MarketPage from '@/pages/MarketPage'
 import ScreenerPage from '@/pages/ScreenerPage'
 import BrokerActivityPage from '@/pages/BrokerActivityPage'
 import BrokerRankingPage from '@/pages/BrokerRankingPage'
@@ -15,6 +16,8 @@ export default function App() {
         switch (currentPage) {
             case 'dashboard':
                 return DashboardPage
+            case 'market':
+                return MarketPage
             case 'screener':
                 return ScreenerPage
             case 'broker-activity':

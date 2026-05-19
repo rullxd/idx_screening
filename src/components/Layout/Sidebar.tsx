@@ -3,6 +3,7 @@ import clsx from 'clsx'
 
 const navigationItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'market', label: 'Market', icon: '📉' },
     { id: 'screener', label: 'Bandar Screener', icon: '🎯' },
     { id: 'broker-activity', label: 'Broker Activity', icon: '🏦' },
     { id: 'broker-ranking', label: 'Broker Ranking', icon: '📈' },

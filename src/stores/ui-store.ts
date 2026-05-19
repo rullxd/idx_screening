@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 interface UIState {
     // Navigation
-    currentPage: 'dashboard' | 'screener' | 'broker-activity' | 'broker-ranking' | 'alerts' | 'heatmap' | 'stock-detail'
+    currentPage: 'dashboard' | 'market' | 'screener' | 'broker-activity' | 'broker-ranking' | 'alerts' | 'heatmap' | 'stock-detail'
     currentBrokerSubpage: 'brokerlist' | 'marketdetector'
 
     // Modals & Drawers
