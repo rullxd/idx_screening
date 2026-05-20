@@ -52,7 +52,12 @@ class APIClient {
                 )
             }
 
-            return response.data.data as T
+            if (response.data && typeof response.data === 'object' && 'data' in response.data) {
+                const payload = (response.data as APIResponse<T>).data
+                return (payload !== undefined ? payload : response.data) as T
+            }
+
+            return response.data as T
         } catch (error) {
             this.clearCancelSignal(config?.cancelKey)
             throw error
@@ -83,7 +88,12 @@ class APIClient {
                 )
             }
 
-            return response.data.data as T
+            if (response.data && typeof response.data === 'object' && 'data' in response.data) {
+                const payload = (response.data as APIResponse<T>).data
+                return (payload !== undefined ? payload : response.data) as T
+            }
+
+            return response.data as T
         } catch (error) {
             this.clearCancelSignal(config?.cancelKey)
             throw error

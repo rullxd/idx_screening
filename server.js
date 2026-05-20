@@ -13,6 +13,7 @@ const PORT = 3000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const responseCache = new Map();
+const streamManagers = new Map();
 const CACHE_TTL = {
     brokerActivity: 60 * 1000,
     marketDetector: 60 * 1000,
@@ -23,6 +24,89 @@ const CACHE_TTL = {
     ihsgChart: 5 * 1000,  // Reduced from 30s to 5s for faster timeframe switching
     brokerRanking: 5 * 60 * 1000
 };
+
+function sendSSE(res, event, data) {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function getIHSGChartTimeframe(timeframe, period) {
+    const timeframeMap = {
+        '1d': 'today',
+        'intraday': 'today',
+        '1w': 'weekly',
+        'weekly': 'weekly',
+        '1m': '1m',
+        'monthly': '1m',
+        '3m': '3m',
+        '3month': '3m',
+        'ytd': 'ytd',
+        '1y': '1y',
+        'yearly': '1y',
+        '3y': '3y',
+        '3year': '3y',
+        '5y': '5y',
+        '5year': '5y',
+    };
+
+    return timeframeMap[timeframe || period || '1d'] || 'today';
+}
+
+function getOrCreateStreamManager(key, intervalMs, fetcher) {
+    if (streamManagers.has(key)) {
+        return streamManagers.get(key);
+    }
+
+    const manager = {
+        clients: new Set(),
+        lastPayload: '',
+        timer: null,
+    };
+
+    const tick = async () => {
+        try {
+            const payload = await fetcher();
+            const serialized = JSON.stringify(payload);
+            if (serialized !== manager.lastPayload) {
+                manager.lastPayload = serialized;
+                for (const client of manager.clients) {
+                    sendSSE(client, 'update', payload);
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Stream ${key} error:`, error.message);
+            for (const client of manager.clients) {
+                sendSSE(client, 'error', { message: error.message });
+            }
+        }
+    };
+
+    manager.timer = setInterval(tick, intervalMs);
+    manager.tick = tick;
+    streamManagers.set(key, manager);
+    return manager;
+}
+
+function attachClientToStream(res, key, intervalMs, fetcher, initialEventName = 'snapshot') {
+    const manager = getOrCreateStreamManager(key, intervalMs, fetcher);
+    manager.clients.add(res);
+
+    res.on('close', () => {
+        manager.clients.delete(res);
+        if (manager.clients.size === 0) {
+            clearInterval(manager.timer);
+            streamManagers.delete(key);
+        }
+    });
+
+    return manager.tick()
+        .then(async () => {
+            if (manager.lastPayload) {
+                sendSSE(res, initialEventName, JSON.parse(manager.lastPayload));
+            }
+        })
+        .catch(() => { });
+}
 
 async function fetchJsonWithCache({ cacheKey, ttlMs, url, headers, logLabel }) {
     const now = Date.now();
@@ -268,28 +352,7 @@ app.get('/api/stock-chart', async (req, res) => {
 app.get('/api/ihsg-chart', async (req, res) => {
     try {
         const { period, timeframe } = req.query;
-
-        // Map period/timeframe to stockbit timeframe param
-        const timeframeMap = {
-            '1d': 'today',
-            'intraday': 'today',
-            '1w': 'weekly',
-            'weekly': 'weekly',
-            '1m': '1m',
-            'monthly': '1m',
-            '3m': '3m',
-            '3month': '3m',
-            'ytd': 'ytd',
-            '1y': '1y',
-            'yearly': '1y',
-            '3y': '3y',
-            '3year': '3y',
-            '5y': '5y',
-            '5year': '5y',
-        };
-
-        // Use timeframe param first, fallback to period, default to 'today'
-        const selectedTimeframe = timeframeMap[timeframe || period || '1d'] || 'today';
+        const selectedTimeframe = getIHSGChartTimeframe(timeframe, period);
 
         const url = `https://exodus.stockbit.com/charts/IHSG/daily?timeframe=${selectedTimeframe}`;
         console.log(`🔗 IHSG Chart URL: ${url}`);
@@ -311,6 +374,65 @@ app.get('/api/ihsg-chart', async (req, res) => {
         console.error('❌ IHSG Chart Proxy Error:', error.message);
         res.status(500).json({ error: error.message });
     }
+});
+
+app.get('/api/stream/ihsg-chart', async (req, res) => {
+    const { period, timeframe } = req.query;
+    const selectedTimeframe = getIHSGChartTimeframe(timeframe, period);
+    const url = `https://exodus.stockbit.com/charts/IHSG/daily?timeframe=${selectedTimeframe}`;
+    const cacheKey = `stream:ihsg-chart:${selectedTimeframe}`;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    res.write(': connected\n\n');
+
+    const managerKey = `ihsg-chart:${selectedTimeframe}`;
+    const fetcher = async () => {
+        const { data } = await fetchJsonWithCache({
+            cacheKey,
+            ttlMs: CACHE_TTL.ihsgChart,
+            url,
+            logLabel: `stream ihsg chart (timeframe=${selectedTimeframe})`,
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+
+        return data;
+    };
+
+    const manager = getOrCreateStreamManager(managerKey, 10000, fetcher);
+    manager.clients.add(res);
+
+    const sendInitial = async () => {
+        try {
+            const payload = await fetcher();
+            manager.lastPayload = JSON.stringify(payload);
+            sendSSE(res, 'snapshot', payload);
+        } catch (error) {
+            sendSSE(res, 'error', { message: error.message });
+        }
+    };
+
+    const heartbeat = setInterval(() => {
+        res.write(': ping\n\n');
+    }, 30000);
+
+    sendInitial();
+
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        manager.clients.delete(res);
+        if (manager.clients.size === 0) {
+            clearInterval(manager.timer);
+            streamManagers.delete(managerKey);
+        }
+    });
 });
 
 // API Proxy Endpoint — Broker Ranking

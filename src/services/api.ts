@@ -300,18 +300,16 @@ export async function fetchMarketDetector(
 // ============= HELPER FUNCTIONS =============
 
 /**
- * Format large numbers for display (T/M/rb format)
+ * Format large numbers for display without abbreviations.
  */
 export function formatBigNumber(value: number | string): string {
     const num = typeof value === 'string' ? parseFloat(value) : value
     if (isNaN(num) || num === 0) return '0'
     const abs = Math.abs(num)
     const sign = num < 0 ? '-' : ''
-    if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}T`
-    if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(1)}M`
-    if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}jt`
-    if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}rb`
-    return `${sign}${abs.toFixed(0)}`
+    return `${sign}${abs.toLocaleString('id-ID', {
+        maximumFractionDigits: 2,
+    })}`
 }
 
 /**
