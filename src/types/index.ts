@@ -123,23 +123,94 @@ export interface TrendingResponse {
 }
 
 // ============= MARKET DETECTOR TYPES =============
-export interface MarketDetectorSignal {
-    code: string
-    name: string
-    signal_type: 'buy' | 'sell' | 'neutral'
-    strength: number
-    brokers_involved: string[]
-    volume_change?: number
-    price_change?: number
-    timestamp?: string
+export interface BrokerBuy {
+    blot: string
+    blotv: string
+    bval: string
+    bvalv: string
+    netbs_broker_code: string
+    netbs_buy_avg_price: string
+    netbs_date: string
+    netbs_stock_code: string
+    type: 'Asing' | 'Lokal' | 'Pemerintah'
+    freq: string
+}
+
+export interface BrokerSell {
+    netbs_broker_code: string
+    netbs_date: string
+    netbs_sell_avg_price: string
+    netbs_stock_code: string
+    slot: string
+    slotv: string
+    sval: string
+    svalv: string
+    type: 'Asing' | 'Lokal' | 'Pemerintah'
+    freq: string
+}
+
+export interface BrokerSummary {
+    brokers_buy: BrokerBuy[]
+    brokers_sell: BrokerSell[]
+    symbol: string
+}
+
+export interface BandarDetector {
+    average: number
+    avg: {
+        accdist: string
+        amount: number
+        percent: number
+        vol: number
+    }
+    avg5: {
+        accdist: string
+        amount: number
+        percent: number
+        vol: number
+    }
+    broker_accdist: string
+    number_broker_buysell: number
+    top1: {
+        accdist: string
+        amount: number
+        percent: number
+        vol: number
+    }
+    top3: {
+        accdist: string
+        amount: number
+        percent: number
+        vol: number
+    }
+    top5: {
+        accdist: string
+        amount: number
+        percent: number
+        vol: number
+    }
+    top10: {
+        accdist: string
+        amount: number
+        percent: number
+        vol: number
+    }
+    total_buyer: number
+    total_seller: number
+    value: number
+    volume: number
+}
+
+export interface MarketDetectorData {
+    bandar_detector: BandarDetector
+    broker_summary: BrokerSummary
+    from: string
+    to: string
 }
 
 export interface MarketDetectorResponse {
-    data: MarketDetectorSignal[]
-    meta?: {
-        timestamp: string
-        total_signals: number
-    }
+    message: string
+    data: MarketDetectorData
 }
 
 // ============= FILTER & SCREENER TYPES =============

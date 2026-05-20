@@ -190,12 +190,31 @@ export function useTrendingStocks(
 
 export function useMarketDetector(
     stockCode?: string,
-    options?: { enabled?: boolean; refetchInterval?: number }
+    options?: { enabled?: boolean; refetchInterval?: number; fromDate?: string; toDate?: string }
 ): UseQueryResult<any, APIException> {
     return useQuery({
-        queryKey: ['market', 'detector', stockCode],
+        queryKey: ['market', 'detector', stockCode, options?.fromDate, options?.toDate],
         queryFn: async () => {
-            const data = await fetchMarketDetector(stockCode)
+            // Logic: jika jam >= 19:00 pakai hari ini, jika belum pakai kemarin
+            const now = new Date()
+            const hour = now.getHours()
+            const today = now.toISOString().split('T')[0]
+
+            let targetDate: string
+            if (hour >= 19) {
+                // Setelah jam 19:00, pakai hari ini
+                targetDate = today
+            } else {
+                // Sebelum jam 19:00, pakai kemarin
+                const yesterday = new Date(now)
+                yesterday.setDate(yesterday.getDate() - 1)
+                targetDate = yesterday.toISOString().split('T')[0]
+            }
+
+            const data = await fetchMarketDetector(stockCode, {
+                fromDate: options?.fromDate || targetDate,
+                toDate: options?.toDate || targetDate,
+            })
             return data
         },
         staleTime: 60 * 1000, // 1 minute

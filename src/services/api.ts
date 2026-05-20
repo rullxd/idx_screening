@@ -277,12 +277,22 @@ export async function fetchMarketDetector(
     params?: {
         fromDate?: string
         toDate?: string
-        minSignalStrength?: number
+        transactionType?: string
+        marketBoard?: string
+        investorType?: string
+        limit?: number
     }
 ): Promise<MarketDetectorResponse> {
     const url = stockCode ? `/market-detector/${stockCode}` : '/market-detector'
     return apiClient.get(url, {
-        params,
+        params: {
+            from: params?.fromDate,
+            to: params?.toDate,
+            transaction_type: params?.transactionType || 'TRANSACTION_TYPE_NET',
+            market_board: params?.marketBoard || 'MARKET_BOARD_REGULER',
+            investor_type: params?.investorType || 'INVESTOR_TYPE_ALL',
+            limit: params?.limit || 25,
+        },
         cancelKey: `market-detector-${stockCode || 'default'}`,
     })
 }

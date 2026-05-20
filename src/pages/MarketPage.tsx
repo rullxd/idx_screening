@@ -2,6 +2,7 @@ import { useState } from 'react'
 import StockSearchBar from '@/components/Market/StockSearchBar'
 import StockChartComponent from '@/components/Market/StockChartComponent'
 import OrderbookCard from '@/components/Market/OrderbookCard'
+import BrokerSummaryCard from '@/components/Market/BrokerSummaryCard'
 
 const DEFAULT_SYMBOL = 'BBRI'
 
@@ -23,6 +24,8 @@ export default function MarketPage() {
                 <StockChartComponent key={`chart-${selectedSymbol}`} symbol={selectedSymbol} />
                 <OrderbookCard key={`ob-${selectedSymbol}`} symbol={selectedSymbol} />
             </div>
+
+            <BrokerSummaryCard key={`broker-${selectedSymbol}`} symbol={selectedSymbol} />
         </div>
     )
 }
