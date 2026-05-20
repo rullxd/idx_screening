@@ -4,6 +4,11 @@ import { fetchTrendingStocks, fetchOrderbook, fetchMarketDetector } from '@/serv
 import { useAlertStore } from '@/stores/alert-store'
 import { useAlertDataStore } from '@/stores/alert-data-store'
 
+const PRICE_ALERT_COOLDOWN_MS = 60 * 60 * 1000 // 60 menit
+const VOLUME_ALERT_COOLDOWN_MS = 45 * 60 * 1000 // 45 menit
+const FOREIGN_ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000 // 4 jam
+const TELEGRAM_DUPLICATE_WINDOW_MS = 15 * 60 * 1000 // 15 menit
+
 // Interface untuk snapshot data saham
 interface StockSnapshot {
     symbol: string
@@ -83,6 +88,8 @@ export function useMonitorSignificantChanges() {
     const previousSnapshots = useRef<Record<string, StockSnapshot>>({})
     const previousForeignNet = useRef<Record<string, number>>({})
     const alertedSymbols = useRef<Set<string>>(new Set()) // Hindari duplikat alert per sesi
+    const alertCooldownUntil = useRef<Record<string, number>>({})
+    const lastTelegramPayload = useRef<{ text: string; sentAt: number } | null>(null)
 
     // Ambil daftar saham trending
     const fetchStocks = useCallback(async () => {
@@ -127,6 +134,12 @@ export function useMonitorSignificantChanges() {
 
             for (const symbol of symbolsToMonitor) {
                 try {
+                    const nowTs = Date.now()
+                    const isInCooldown = (key: string) => (alertCooldownUntil.current[key] ?? 0) > nowTs
+                    const markCooldown = (key: string, ms: number) => {
+                        alertCooldownUntil.current[key] = nowTs + ms
+                    }
+
                     // ===== GUNAKAN ORDERBOOK UNTUK DATA REALTIME =====
                     const obData: any = await fetchOrderbook(symbol)
                     const ob = obData?.data || obData || {}
@@ -149,8 +162,9 @@ export function useMonitorSignificantChanges() {
 
                     if (absPctChange >= settings.priceChangeThreshold) {
                         const alertKey = `${symbol}-price-${Math.floor(absPctChange)}`
+                        const cooldownKey = `${symbol}-price-${pctChange > 0 ? 'up' : 'down'}`
 
-                        if (!alertedSymbols.current.has(alertKey)) {
+                        if (!alertedSymbols.current.has(alertKey) && !isInCooldown(cooldownKey)) {
                             const severity: 'high' | 'medium' | 'low' =
                                 absPctChange >= settings.priceChangeThreshold * 2 ? 'high' :
                                     absPctChange >= settings.priceChangeThreshold ? 'medium' : 'low'
@@ -167,6 +181,7 @@ export function useMonitorSignificantChanges() {
                                     severity,
                                 })
                                 alertedSymbols.current.add(alertKey)
+                                markCooldown(cooldownKey, PRICE_ALERT_COOLDOWN_MS)
                             }
 
                             if (pctChange < 0 && settings.alertTypes.priceDown) {
@@ -181,6 +196,7 @@ export function useMonitorSignificantChanges() {
                                     severity,
                                 })
                                 alertedSymbols.current.add(alertKey)
+                                markCooldown(cooldownKey, PRICE_ALERT_COOLDOWN_MS)
                             }
                         }
                     }
@@ -189,8 +205,13 @@ export function useMonitorSignificantChanges() {
                     if (settings.alertTypes.volumeSpike && prev && prev.volume > 0 && totalVolume > 0) {
                         const volumeChange = ((totalVolume - prev.volume) / prev.volume) * 100
                         const alertKey = `${symbol}-vol-${Math.floor(volumeChange / 50) * 50}`
+                        const cooldownKey = `${symbol}-vol-${volumeChange > 0 ? 'up' : 'down'}`
 
-                        if (Math.abs(volumeChange) >= settings.volumeChangeThreshold && !alertedSymbols.current.has(alertKey)) {
+                        if (
+                            Math.abs(volumeChange) >= settings.volumeChangeThreshold
+                            && !alertedSymbols.current.has(alertKey)
+                            && !isInCooldown(cooldownKey)
+                        ) {
                             const severity: 'high' | 'medium' | 'low' =
                                 Math.abs(volumeChange) >= settings.volumeChangeThreshold * 2 ? 'high' : 'medium'
 
@@ -205,6 +226,7 @@ export function useMonitorSignificantChanges() {
                                 severity,
                             })
                             alertedSymbols.current.add(alertKey)
+                            markCooldown(cooldownKey, VOLUME_ALERT_COOLDOWN_MS)
                         }
                     }
 
@@ -239,8 +261,13 @@ export function useMonitorSignificantChanges() {
                                     && (foreignNetBuyMillions - prevNet) >= thresholdMillions * 0.2
 
                                 const alertKey = `${symbol}-foreign-${targetDate}`
+                                const cooldownKey = `${symbol}-foreign`
 
-                                if ((isNewCrossing || isSignificantIncrease) && !alertedSymbols.current.has(alertKey)) {
+                                if (
+                                    (isNewCrossing || isSignificantIncrease)
+                                    && !alertedSymbols.current.has(alertKey)
+                                    && !isInCooldown(cooldownKey)
+                                ) {
                                     const netBilion = (foreignNetBuyMillions / 1000).toFixed(2)
                                     const msg = `🌍 <b>${symbol}</b> Akumulasi Asing terdeteksi! Net beli asing: <b>Rp ${netBilion}M</b> (threshold: Rp ${settings.foreignNetBuyThreshold}M)`
                                     telegramMessages.push(msg)
@@ -253,6 +280,7 @@ export function useMonitorSignificantChanges() {
                                         severity: foreignNetBuyMillions >= thresholdMillions * 2 ? 'high' : 'medium',
                                     })
                                     alertedSymbols.current.add(alertKey)
+                                    markCooldown(cooldownKey, FOREIGN_ALERT_COOLDOWN_MS)
                                 }
                                 previousForeignNet.current[symbol] = foreignNetBuyMillions
                             }
@@ -264,8 +292,16 @@ export function useMonitorSignificantChanges() {
                     // Kirim notifikasi Telegram
                     if (telegramMessages.length > 0) {
                         const fullMessage = `🔔 <b>Market Alert</b>\n\n` + telegramMessages.join('\n')
-                        if (settings.telegramEnabled) {
+                        const duplicatedPayload =
+                            lastTelegramPayload.current
+                            && lastTelegramPayload.current.text === fullMessage
+                            && (Date.now() - lastTelegramPayload.current.sentAt) < TELEGRAM_DUPLICATE_WINDOW_MS
+
+                        if (settings.telegramEnabled && !duplicatedPayload) {
                             await sendTelegramNotification(fullMessage)
+                            lastTelegramPayload.current = { text: fullMessage, sentAt: Date.now() }
+                        } else if (duplicatedPayload) {
+                            console.log('[Monitor] ⏭️ Skip Telegram: payload sama dalam window dedup')
                         }
                     }
 
@@ -295,6 +331,8 @@ export function useMonitorSignificantChanges() {
                 alertedSymbols.current.clear()
                 previousSnapshots.current = {}
                 previousForeignNet.current = {}
+                alertCooldownUntil.current = {}
+                lastTelegramPayload.current = null
                 console.log('[Monitor] 🔄 Reset harian - alert history cleared')
             }
         }
