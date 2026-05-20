@@ -9,7 +9,6 @@ const VOLUME_ALERT_COOLDOWN_MS = 45 * 60 * 1000 // 45 menit
 const FOREIGN_ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000 // 4 jam
 const TELEGRAM_DUPLICATE_WINDOW_MS = 15 * 60 * 1000 // 15 menit
 
-// Interface untuk snapshot data saham
 interface StockSnapshot {
     symbol: string
     price: number
@@ -17,7 +16,6 @@ interface StockSnapshot {
     prevClose: number
 }
 
-// Interface untuk struktur data alert yang akan ditampilkan
 interface MarketAlert {
     id: string
     type: 'priceUp' | 'priceDown' | 'volumeSpike' | 'foreignAccumulation'
@@ -27,48 +25,37 @@ interface MarketAlert {
     severity: 'high' | 'medium' | 'low'
 }
 
-/**
- * Cek apakah sekarang dalam jam pasar IDX
- * Pasar buka: Senin-Jumat, 09:00-16:00 WIB
- */
+interface UseMonitorOptions {
+    paused?: boolean
+}
+
 function isMarketHours(): boolean {
     const now = new Date()
-    // Konversi ke waktu Jakarta (UTC+7)
-    const jakartaOffset = 7 * 60 // menit
+    const jakartaOffset = 7 * 60
     const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes()
     const jakartaMinutes = utcMinutes + jakartaOffset
     const jakartaHour = Math.floor((jakartaMinutes % (24 * 60)) / 60)
 
-    const dayOfWeek = now.getUTCDay() // 0=Sun, 6=Sat
-    // Adjust day for timezone
+    const dayOfWeek = now.getUTCDay()
     const jakartaDay = jakartaMinutes >= 24 * 60
         ? (dayOfWeek + 1) % 7
         : dayOfWeek
 
-    // Pasar tutup di akhir pekan
     if (jakartaDay === 0 || jakartaDay === 6) return false
-
-    // Pasar buka 08:45 - 16:15 (beri sedikit buffer)
     return jakartaHour >= 9 && jakartaHour < 16
 }
 
-/**
- * Dapatkan tanggal target untuk market detector (hari trading terakhir)
- */
 function getMarketDetectorDate(): string {
     const now = new Date()
     const hour = now.getHours()
 
-    // Setelah jam 16, gunakan hari ini
     if (hour >= 16) {
         return now.toISOString().split('T')[0]
     }
 
-    // Sebelum jam 16, gunakan kemarin (atau hari kerja terakhir)
     const yesterday = new Date(now)
     yesterday.setDate(yesterday.getDate() - 1)
 
-    // Skip weekend
     while (yesterday.getDay() === 0 || yesterday.getDay() === 6) {
         yesterday.setDate(yesterday.getDate() - 1)
     }
@@ -77,21 +64,17 @@ function getMarketDetectorDate(): string {
 }
 
 /**
- * Memantau perubahan harga dan volume saham menggunakan data orderbook (realtime).
- * Mengirim notifikasi ke Telegram jika terdeteksi perubahan signifikan.
- *
- * Data source:
- * - fetchOrderbook: harga realtime, volume, percentage_change (cache 5 detik)
- * - fetchMarketDetector: data akumulasi asing (cache 60 detik)
+ * Monitor global alerting. Bisa dipause saat halaman scanner aktif
+ * agar tidak menambah burst request dan memicu 429.
  */
-export function useMonitorSignificantChanges() {
+export function useMonitorSignificantChanges(options: UseMonitorOptions = {}) {
+    const { paused = false } = options
     const previousSnapshots = useRef<Record<string, StockSnapshot>>({})
     const previousForeignNet = useRef<Record<string, number>>({})
-    const alertedSymbols = useRef<Set<string>>(new Set()) // Hindari duplikat alert per sesi
+    const alertedSymbols = useRef<Set<string>>(new Set())
     const alertCooldownUntil = useRef<Record<string, number>>({})
     const lastTelegramPayload = useRef<{ text: string; sentAt: number } | null>(null)
 
-    // Ambil daftar saham trending
     const fetchStocks = useCallback(async () => {
         try {
             const response = await fetchTrendingStocks?.() ?? []
@@ -104,15 +87,18 @@ export function useMonitorSignificantChanges() {
 
     const { settings } = useAlertStore()
 
-    // Polling data harga berdasarkan interval dari store
     useEffect(() => {
+        if (paused) {
+            console.log('[Monitor] ⏸️ Monitoring dipause sementara (scanner aktif).')
+            return
+        }
+
         if (!settings.enabled) {
             console.log('[Monitor] Alerting is disabled by settings.')
             return
         }
 
         const checkChanges = async () => {
-            // Cek jam pasar - tetap jalankan tapi log status
             const marketOpen = isMarketHours()
             if (!marketOpen) {
                 console.log('[Monitor] ⏸️ Pasar tutup. Data mungkin tidak berubah. Tetap monitoring untuk EOD alerts...')
@@ -140,7 +126,6 @@ export function useMonitorSignificantChanges() {
                         alertCooldownUntil.current[key] = nowTs + ms
                     }
 
-                    // ===== GUNAKAN ORDERBOOK UNTUK DATA REALTIME =====
                     const obData: any = await fetchOrderbook(symbol)
                     const ob = obData?.data || obData || {}
 
@@ -152,12 +137,8 @@ export function useMonitorSignificantChanges() {
                     if (lastPrice <= 0) continue
 
                     const prev = previousSnapshots.current[symbol]
-
-                    // List untuk menampung pesan dan alert
                     const telegramMessages: string[] = []
                     const generatedAlerts: MarketAlert[] = []
-
-                    // ===== CEK PRICE CHANGE (dari orderbook percentage_change) =====
                     const absPctChange = Math.abs(pctChange)
 
                     if (absPctChange >= settings.priceChangeThreshold) {
@@ -166,8 +147,7 @@ export function useMonitorSignificantChanges() {
 
                         if (!alertedSymbols.current.has(alertKey) && !isInCooldown(cooldownKey)) {
                             const severity: 'high' | 'medium' | 'low' =
-                                absPctChange >= settings.priceChangeThreshold * 2 ? 'high' :
-                                    absPctChange >= settings.priceChangeThreshold ? 'medium' : 'low'
+                                absPctChange >= settings.priceChangeThreshold * 2 ? 'high' : 'medium'
 
                             if (pctChange > 0 && settings.alertTypes.priceUp) {
                                 const message = `💰 <b>${symbol}</b> Harga naik <b>📈 +${pctChange.toFixed(2)}%</b> (${prevClose.toLocaleString('id-ID')} → ${lastPrice.toLocaleString('id-ID')})`
@@ -201,7 +181,6 @@ export function useMonitorSignificantChanges() {
                         }
                     }
 
-                    // ===== CEK VOLUME SPIKE (bandingkan dengan snapshot sebelumnya) =====
                     if (settings.alertTypes.volumeSpike && prev && prev.volume > 0 && totalVolume > 0) {
                         const volumeChange = ((totalVolume - prev.volume) / prev.volume) * 100
                         const alertKey = `${symbol}-vol-${Math.floor(volumeChange / 50) * 50}`
@@ -230,7 +209,6 @@ export function useMonitorSignificantChanges() {
                         }
                     }
 
-                    // ===== CEK FOREIGN ACCUMULATION via Market Detector =====
                     if (settings.alertTypes.foreignAccumulation) {
                         try {
                             const targetDate = getMarketDetectorDate()
@@ -238,11 +216,9 @@ export function useMonitorSignificantChanges() {
                                 fromDate: targetDate,
                                 toDate: targetDate,
                             })
-                            const brokerSummary = detectorData?.data?.broker_summary
-                                || detectorData?.broker_summary
+                            const brokerSummary = detectorData?.data?.broker_summary || detectorData?.broker_summary
 
                             if (brokerSummary) {
-                                // Hitung net beli asing
                                 const foreignBuy = (brokerSummary.brokers_buy || [])
                                     .filter((b: any) => b.type === 'Asing')
                                     .reduce((sum: number, b: any) => sum + parseFloat(b.bval || b.bvalv || '0'), 0)
@@ -251,7 +227,6 @@ export function useMonitorSignificantChanges() {
                                     .filter((s: any) => s.type === 'Asing')
                                     .reduce((sum: number, s: any) => sum + parseFloat(s.sval || s.svalv || '0'), 0)
 
-                                // bval/sval biasanya dalam juta IDR, threshold dalam miliar → konversi
                                 const foreignNetBuyMillions = foreignBuy - foreignSell
                                 const thresholdMillions = settings.foreignNetBuyThreshold * 1000
 
@@ -289,7 +264,6 @@ export function useMonitorSignificantChanges() {
                         }
                     }
 
-                    // Kirim notifikasi Telegram
                     if (telegramMessages.length > 0) {
                         const fullMessage = `🔔 <b>Market Alert</b>\n\n` + telegramMessages.join('\n')
                         const duplicatedPayload =
@@ -305,13 +279,11 @@ export function useMonitorSignificantChanges() {
                         }
                     }
 
-                    // Simpan alert ke store
                     if (generatedAlerts.length > 0) {
                         useAlertDataStore.getState().addAlerts(generatedAlerts)
                         console.log(`[Monitor] ✅ ${generatedAlerts.length} alert(s) untuk ${symbol}`)
                     }
 
-                    // Simpan snapshot terbaru
                     previousSnapshots.current[symbol] = {
                         symbol,
                         price: lastPrice,
@@ -324,7 +296,6 @@ export function useMonitorSignificantChanges() {
             }
         }
 
-        // Reset alertedSymbols setiap hari baru
         const resetDaily = () => {
             const now = new Date()
             if (now.getHours() === 8 && now.getMinutes() < 5) {
@@ -337,10 +308,8 @@ export function useMonitorSignificantChanges() {
             }
         }
 
-        // Jalankan pengecekan pertama setelah 10 detik
         const initialTimeout = setTimeout(checkChanges, 10_000)
 
-        // Polling setiap X menit
         const interval = setInterval(() => {
             resetDaily()
             checkChanges()
@@ -350,5 +319,5 @@ export function useMonitorSignificantChanges() {
             clearTimeout(initialTimeout)
             clearInterval(interval)
         }
-    }, [fetchStocks, settings])
+    }, [fetchStocks, paused, settings])
 }

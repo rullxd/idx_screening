@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchStockChart, fetchTrendingStocks } from '@/services/api'
 import { analyzeStock, parseChartToCandles, StockSignalResult } from '@/utils/technical-signals'
@@ -32,11 +32,42 @@ export default function SignalScannerPage() {
     const [filter, setFilter] = useState<FilterType>('ALL')
     const [sortBy, setSortBy] = useState<'score' | 'rsi' | 'change'>('score')
     const [expandedRow, setExpandedRow] = useState<string | null>(null)
+    const hasAutoScanned = useRef(false)
+
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+    const isRateLimitError = (error: unknown) => {
+        const err = error as any
+        const code = String(err?.code || '')
+        const message = String(err?.message || '')
+        return code.includes('429') || message.includes('429')
+    }
+
+    const fetchChartWithRetry = useCallback(async (code: string) => {
+        let attempts = 0
+        const maxAttempts = 3
+
+        while (attempts < maxAttempts) {
+            try {
+                return await fetchStockChart(code, { timeframe: '3m' })
+            } catch (error) {
+                attempts += 1
+                if (!isRateLimitError(error) || attempts >= maxAttempts) {
+                    throw error
+                }
+
+                // Backoff saat 429 agar scanner tetap lanjut dan tidak mengosongkan semua hasil
+                await sleep(700 * attempts)
+            }
+        }
+
+        return null
+    }, [])
 
     // Fetch trending to get dynamic stock list
     const { data: trendingData } = useQuery({
         queryKey: ['signals', 'trending'],
-        queryFn: () => fetchTrendingStocks({ limit: 20 }),
+        queryFn: () => fetchTrendingStocks({ limit: 10 }),
         staleTime: 5 * 60 * 1000,
     })
 
@@ -54,7 +85,7 @@ export default function SignalScannerPage() {
         } catch { /* ignore */ }
         // Merge trending with defaults, deduplicate
         const merged = [...new Set([...trendingCodes, ...DEFAULT_STOCKS])]
-        return merged.slice(0, 40) // max 40 stocks
+        return merged.slice(0, 18) // max 18 stocks untuk mode stabil anti-429
     }, [trendingData])
 
     const runScan = useCallback(async () => {
@@ -65,30 +96,28 @@ export default function SignalScannerPage() {
 
         const scannedResults: StockSignalResult[] = []
 
-        // Scan in batches of 5 to avoid overwhelming API
-        for (let i = 0; i < stocks.length; i += 5) {
-            const batch = stocks.slice(i, i + 5)
-            const promises = batch.map(async (code) => {
-                try {
-                    const chartData = await fetchStockChart(code, { timeframe: '3m' })
+        // Mode stabil: scan 1-by-1 untuk menekan burst request
+        for (let i = 0; i < stocks.length; i += 1) {
+            const code = stocks[i]
+            try {
+                const chartData = await fetchChartWithRetry(code)
+                if (chartData) {
                     const candles = parseChartToCandles(chartData)
                     const analysis = analyzeStock(candles)
                     if (analysis) {
-                        return { ...analysis, code } as StockSignalResult
+                        scannedResults.push({ ...analysis, code } as StockSignalResult)
                     }
-                } catch (err) {
-                    console.warn(`[Scanner] Failed to scan ${code}:`, err)
                 }
-                return null
-            })
+            } catch (err) {
+                console.warn(`[Scanner] Failed to scan ${code}:`, err)
+            }
 
-            const batchResults = await Promise.all(promises)
-            batchResults.forEach((r) => {
-                if (r) scannedResults.push(r)
-            })
-
-            setProgress({ done: Math.min(i + 5, stocks.length), total: stocks.length })
+            setProgress({ done: i + 1, total: stocks.length })
             setResults([...scannedResults])
+
+            if (i + 1 < stocks.length) {
+                await sleep(900)
+            }
         }
 
         setScanning(false)
@@ -96,6 +125,8 @@ export default function SignalScannerPage() {
 
     // Auto-scan on mount
     useEffect(() => {
+        if (hasAutoScanned.current) return
+        hasAutoScanned.current = true
         runScan()
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

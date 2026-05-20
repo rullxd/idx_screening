@@ -16,10 +16,10 @@ const MAX_CACHE_SIZE = 200; // LRU cache limit
 const responseCache = new Map();
 const streamManagers = new Map();
 
-// Simple rate limiter (per IP, max 60 requests per minute)
+// Simple rate limiter (per IP). Raised to support scanner + dashboard bursts.
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX = 60;
+const RATE_LIMIT_MAX = 180;
 
 function rateLimiter(req, res, next) {
     const ip = req.ip || req.connection.remoteAddress;

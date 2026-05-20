@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom' // Import Routes & Route
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom' // Import Routes & Route
 import Layout from '@/components/Layout'
 import DashboardPage from '@/pages/DashboardPage'
 import MarketPage from '@/pages/MarketPage'
@@ -10,8 +10,11 @@ import HeatmapPage from '@/pages/HeatmapPage'
 import { useMonitorSignificantChanges } from '@/hooks/use-monitor'
 
 export default function App() {
+    const location = useLocation()
+    const isSignalsRoute = location.pathname.startsWith('/signals')
+
     // Jalankan pemantauan perubahan pasar secara global
-    useMonitorSignificantChanges()
+    useMonitorSignificantChanges({ paused: isSignalsRoute })
 
     return (
         <Layout>

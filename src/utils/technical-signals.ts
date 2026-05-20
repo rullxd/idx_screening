@@ -138,7 +138,9 @@ function computeMACD(closes: number[]): { macdLine: number[]; signalLine: number
 // ============= SIGNAL DETECTION =============
 
 export function analyzeStock(candles: OHLCVCandle[]): Omit<StockSignalResult, 'code'> | null {
-    if (!candles || candles.length < 50) return null
+    // Banyak endpoint chart terbaru memberi titik data lebih sedikit dari 50 untuk beberapa saham.
+    // 30 candle masih cukup untuk RSI/MACD dasar + tren jangka pendek.
+    if (!candles || candles.length < 30) return null
 
     const closes = candles.map((c) => c.close)
     const volumes = candles.map((c) => c.volume)
@@ -325,6 +327,8 @@ export function parseChartToCandles(chartData: any): OHLCVCandle[] {
 
         if (Array.isArray(data)) {
             items = data
+        } else if (Array.isArray(data?.prices)) {
+            items = data.prices
         } else if (data?.chart_data) {
             items = Array.isArray(data.chart_data) ? data.chart_data : []
         } else if (data?.data && Array.isArray(data.data)) {
@@ -332,15 +336,32 @@ export function parseChartToCandles(chartData: any): OHLCVCandle[] {
         }
 
         return items
-            .filter((item: any) => item && (item.close || item.Close))
-            .map((item: any) => ({
-                date: item.date || item.Date || item.timestamp || '',
-                open: item.open || item.Open || 0,
-                high: item.high || item.High || 0,
-                low: item.low || item.Low || 0,
-                close: item.close || item.Close || 0,
-                volume: item.volume || item.Volume || 0,
-            }))
+            .filter((item: any) => {
+                if (!item) return false
+                return (
+                    item.close != null ||
+                    item.Close != null ||
+                    item.value != null ||
+                    item.price != null
+                )
+            })
+            .map((item: any) => {
+                const close = Number(item.close ?? item.Close ?? item.value ?? item.price ?? 0)
+                const open = Number(item.open ?? item.Open ?? close)
+                const high = Number(item.high ?? item.High ?? close)
+                const low = Number(item.low ?? item.Low ?? close)
+                const volume = Number(item.volume ?? item.Volume ?? 0)
+
+                return {
+                    date: item.date || item.Date || item.timestamp || item.formatted_date || '',
+                    open: Number.isFinite(open) ? open : 0,
+                    high: Number.isFinite(high) ? high : 0,
+                    low: Number.isFinite(low) ? low : 0,
+                    close: Number.isFinite(close) ? close : 0,
+                    volume: Number.isFinite(volume) ? volume : 0,
+                }
+            })
+            .filter((c) => c.close > 0)
     } catch {
         return []
     }
