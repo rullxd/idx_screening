@@ -104,31 +104,14 @@ export default function BrokerSummaryCard({ symbol }: BrokerSummaryCardProps) {
     })
 
     const brokerData = useMemo(() => {
-        console.log('[BrokerSummaryCard] Parsing brokerData from:', data)
-        // Cek berbagai kemungkinan struktur data
-        if (data?.data?.broker_summary) {
-            console.log('[BrokerSummaryCard] Found data.data.broker_summary')
-            return data.data.broker_summary
-        }
-        if (data?.broker_summary) {
-            console.log('[BrokerSummaryCard] Found data.broker_summary')
-            return data.broker_summary
-        }
-        console.log('[BrokerSummaryCard] broker_summary not found, returning null')
+        if (data?.data?.broker_summary) return data.data.broker_summary
+        if (data?.broker_summary) return data.broker_summary
         return null
     }, [data])
 
     const bandarData = useMemo(() => {
-        console.log('[BrokerSummaryCard] Parsing bandarData from:', data)
-        if (data?.data?.bandar_detector) {
-            console.log('[BrokerSummaryCard] Found data.data.bandar_detector')
-            return data.data.bandar_detector
-        }
-        if (data?.bandar_detector) {
-            console.log('[BrokerSummaryCard] Found data.bandar_detector')
-            return data.bandar_detector
-        }
-        console.log('[BrokerSummaryCard] bandar_detector not found, returning null')
+        if (data?.data?.bandar_detector) return data.data.bandar_detector
+        if (data?.bandar_detector) return data.bandar_detector
         return null
     }, [data])
 
@@ -154,13 +137,6 @@ export default function BrokerSummaryCard({ symbol }: BrokerSummaryCardProps) {
 
     const brokersBuy = brokerData?.brokers_buy || []
     const brokersSell = brokerData?.brokers_sell || []
-
-    // Debug logging
-    console.log('[BrokerSummaryCard] Full data:', data)
-    console.log('[BrokerSummaryCard] brokerData:', brokerData)
-    console.log('[BrokerSummaryCard] bandarData:', bandarData)
-    console.log('[BrokerSummaryCard] brokersBuy:', brokersBuy)
-    console.log('[BrokerSummaryCard] brokersSell:', brokersSell)
 
     return (
         <Card className="p-4 flex flex-col h-[520px]">
