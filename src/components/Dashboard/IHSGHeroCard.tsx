@@ -1,5 +1,5 @@
 import { useIHSGChart } from '@/hooks/use-queries'
-import { formatBigNumber } from '@/services/api'
+import { formatBigNumber } from '@/utils/formatters'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 
 export default function IHSGHeroCard() {

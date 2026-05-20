@@ -1,5 +1,5 @@
 import { Broker } from '@/types'
-import { formatCurrency } from '@/services/api'
+import { formatCurrency } from '@/utils/formatters'
 import Card from '@/components/Card'
 
 interface SummaryCardsProps {

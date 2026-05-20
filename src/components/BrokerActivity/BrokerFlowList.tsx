@@ -1,4 +1,4 @@
-import { formatBigNumber, formatCurrency } from '@/services/api'
+import { formatBigNumber, formatCurrency } from '@/utils/formatters'
 import { MarketDetectorBroker } from '@/utils/broker-activity'
 import { Card } from '@/components'
 import clsx from 'clsx'

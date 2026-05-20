@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMarketDetector } from '@/hooks/use-queries'
-import { formatBigNumber, formatCurrency } from '@/services/api'
+import { formatBigNumber, formatCurrency } from '@/utils/formatters'
 import { parseMarketDetector, BandarTierData } from '@/utils/broker-activity'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 import BrokerFlowList from './BrokerFlowList'

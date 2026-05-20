@@ -1,5 +1,5 @@
 import { useTrendingStocks } from '@/hooks/use-queries'
-import { formatBigNumber, formatCurrency } from '@/services/api'
+import { formatBigNumber, formatCurrency } from '@/utils/formatters'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 
 export default function TrendingStocksGrid() {

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Broker } from '@/types'
-import { formatBigNumber } from '@/services/api'
+import { formatBigNumber } from '@/utils/formatters'
 import {
     BarChart,
     Bar,

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useOrderbook } from '@/hooks/use-queries'
-import { formatBigNumber } from '@/services/api'
+import { formatBigNumber } from '@/utils/formatters'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 import clsx from 'clsx'
 

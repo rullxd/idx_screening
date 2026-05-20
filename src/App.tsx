@@ -8,8 +8,12 @@ import BrokerActivityPage from '@/pages/BrokerActivityPage'
 import BrokerRankingPage from '@/pages/BrokerRankingPage'
 import AlertsPage from '@/pages/AlertsPage'
 import HeatmapPage from '@/pages/HeatmapPage'
+import { useMonitorSignificantChanges } from '@/hooks/use-monitor'
 
 export default function App() {
+    // Jalankan pemantauan perubahan pasar secara global
+    useMonitorSignificantChanges()
+
     const currentPage = useUIStore((state) => state.currentPage)
 
     const PageComponent = useMemo(() => {

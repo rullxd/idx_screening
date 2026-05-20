@@ -60,6 +60,80 @@ export default function IHSGChartComponent() {
     const trendColor = trend === 'naik' ? 'text-accent-green' : trend === 'turun' ? 'text-accent-red' : 'text-dark-400'
     const gradientColor = trend === 'naik' ? '#10b981' : '#ef4444'
 
+    // Custom Tooltip Component - menampilkan harga & perubahan
+    const CustomTooltip = ({ active, payload }: any) => {
+        if (active && payload && payload.length) {
+            const currentPrice = payload[0].value
+            const change = currentPrice - first
+            const changePercent = first !== 0 ? (change / first) * 100 : 0
+            const isPositive = change >= 0
+
+            return (
+                <div className="bg-dark-900/95 border border-dark-700 px-3 py-2 rounded-lg shadow-2xl backdrop-blur-sm">
+                    <div className="flex flex-col">
+                        <span className="text-dark-100 font-bold text-base leading-none">
+                            {currentPrice.toLocaleString('id-ID', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className={`text-xs font-semibold mt-1 ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
+                            {isPositive ? '▲' : '▼'} {Math.abs(change).toFixed(2)} ({isPositive ? '+' : ''}{changePercent.toFixed(2)}%)
+                        </span>
+                    </div>
+                </div>
+            )
+        }
+        return null
+    }
+
+    // Custom Cursor - garis vertikal + label jam di sumbu X bawah
+    const CustomChartCursor = (props: any) => {
+        const { points, payload, top, height } = props
+        if (!points || points.length === 0) return null
+
+        const x = points[0].x
+        const y = top || 0
+        const chartBottom = y + (height || 300)
+        const timeLabel = payload?.[0]?.payload?.time || ''
+
+        return (
+            <g>
+                {/* Garis vertikal putus-putus dari titik data sampai bawah */}
+                <line
+                    x1={x}
+                    y1={y}
+                    x2={x}
+                    y2={chartBottom}
+                    stroke="#6b7280"
+                    strokeWidth={1}
+                    strokeDasharray="3 3"
+                />
+                {/* Label jam di bagian bawah garis */}
+                <g transform={`translate(${x}, ${chartBottom + 4})`}>
+                    <rect
+                        x={-28}
+                        y={0}
+                        width={56}
+                        height={18}
+                        rx={4}
+                        ry={4}
+                        fill="#1e293b"
+                        stroke="#374151"
+                        strokeWidth={0.5}
+                    />
+                    <text
+                        x={0}
+                        y={13}
+                        textAnchor="middle"
+                        fill="#e5e7eb"
+                        fontSize={10}
+                        fontWeight={600}
+                    >
+                        {timeLabel}
+                    </text>
+                </g>
+            </g>
+        )
+    }
+
     if (!chartData || chartData.length === 0) {
         return (
             <Card className="p-6">
@@ -133,7 +207,13 @@ export default function IHSGChartComponent() {
                         </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                    <XAxis dataKey="time" stroke="#6b7280" style={{ fontSize: '11px' }} interval="preserveStartEnd" />
+                    <XAxis
+                        dataKey="time"
+                        stroke="#6b7280"
+                        style={{ fontSize: '11px' }}
+                        interval="preserveStartEnd"
+                        minTickGap={80} // Memaksa jarak antar label jam agar tidak terlalu padat
+                    />
                     <YAxis stroke="#6b7280" style={{ fontSize: '11px' }} domain={['dataMin - 50', 'dataMax + 50']} width={60} />
 
                     {/* Reference lines for high/low/avg - very subtle */}
@@ -142,13 +222,8 @@ export default function IHSGChartComponent() {
                     <ReferenceLine y={avg} stroke="#f59e0b" strokeDasharray="5 5" opacity={0.15} strokeWidth={1} />
 
                     <Tooltip
-                        contentStyle={{
-                            backgroundColor: '#0f172a',
-                            border: '1px solid #1e293b',
-                            borderRadius: '8px'
-                        }}
-                        labelStyle={{ color: '#e5e7eb' }}
-                        formatter={(value: number) => [value.toFixed(2), 'Price']}
+                        content={<CustomTooltip />}
+                        cursor={<CustomChartCursor />}
                     />
                     <Area
                         type="monotone"

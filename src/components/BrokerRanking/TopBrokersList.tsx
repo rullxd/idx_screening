@@ -1,5 +1,5 @@
 import { Broker } from '@/types'
-import { formatCurrency, formatVolume } from '@/services/api'
+import { formatCurrency, formatVolume } from '@/utils/formatters'
 import Card from '@/components/Card'
 
 interface TopBrokersListProps {

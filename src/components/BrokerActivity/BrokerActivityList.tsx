@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useBrokerActivity } from '@/hooks/use-queries'
-import { formatCurrency } from '@/services/api'
+import { formatCurrency } from '@/utils/formatters'
 import { parseBrokerActivity } from '@/utils/broker-activity'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 import DateRangePicker, { DateRange } from '../DateRangePicker'

@@ -1,5 +1,5 @@
 import { useScreenerStore } from '@/stores/screener-store'
-import { formatCurrency } from '@/services/api'
+import { formatCurrency } from '@/utils/formatters'
 import { Card } from '@/components'
 
 export default function ScreenerSummaryCards() {

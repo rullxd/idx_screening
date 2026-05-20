@@ -1,5 +1,5 @@
 import { useOrderbook, useStockChart } from '@/hooks/use-queries'
-import { formatBigNumber } from '@/services/api'
+import { formatBigNumber } from '@/utils/formatters'
 import { AreaChart, Area, ResponsiveContainer } from 'recharts'
 
 function accdistColor(val: string): string {

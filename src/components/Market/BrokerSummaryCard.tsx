@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useMarketDetector } from '@/hooks/use-queries'
-import { formatCurrency, formatVolume } from '@/services/api'
+import { formatCurrency, formatVolume } from '@/utils/formatters'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 import clsx from 'clsx'
 

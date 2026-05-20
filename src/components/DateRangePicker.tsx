@@ -14,7 +14,7 @@ interface DateRangePickerProps {
 export default function DateRangePicker({
     value,
     onChange,
-    placeholder = 'Pilih tanggal',
+    placeholder: _placeholder = 'Pilih tanggal',
 }: DateRangePickerProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [tempFrom, setTempFrom] = useState<Date>(value.from)
