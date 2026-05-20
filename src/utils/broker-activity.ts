@@ -68,6 +68,13 @@ export interface MarketDetectorBroker {
     investorType: string
 }
 
+export interface BandarTierData {
+    accdist: string
+    amount: number
+    percent: number
+    vol: number
+}
+
 export interface ParsedMarketDetector {
     symbol: string
     dateFrom?: string
@@ -79,6 +86,16 @@ export interface ParsedMarketDetector {
         brokerAccdist: string
         totalBuyers: number
         totalSellers: number
+        average: number
+        numberBrokerBuySell: number
+    }
+    tiers?: {
+        avg: BandarTierData
+        avg5: BandarTierData
+        top1: BandarTierData
+        top3: BandarTierData
+        top5: BandarTierData
+        top10: BandarTierData
     }
     buyers: MarketDetectorBroker[]
     sellers: MarketDetectorBroker[]
@@ -100,6 +117,15 @@ function normalizeDetectorBroker(entry: any, side: 'buy' | 'sell'): MarketDetect
     }
 }
 
+function normalizeTier(tier: any): BandarTierData {
+    return {
+        accdist: tier?.accdist ?? '—',
+        amount: Number(tier?.amount ?? 0),
+        percent: Number(tier?.percent ?? 0),
+        vol: Number(tier?.vol ?? 0),
+    }
+}
+
 export function parseMarketDetector(raw: any): ParsedMarketDetector {
     const payload = raw?.data ?? raw ?? {}
     const bandar = payload.bandar_detector ?? {}
@@ -116,6 +142,16 @@ export function parseMarketDetector(raw: any): ParsedMarketDetector {
             brokerAccdist: bandar.broker_accdist ?? '—',
             totalBuyers: Number(bandar.total_buyer ?? 0),
             totalSellers: Number(bandar.total_seller ?? 0),
+            average: Number(bandar.average ?? 0),
+            numberBrokerBuySell: Number(bandar.number_broker_buysell ?? 0),
+        },
+        tiers: {
+            avg: normalizeTier(bandar.avg),
+            avg5: normalizeTier(bandar.avg5),
+            top1: normalizeTier(bandar.top1),
+            top3: normalizeTier(bandar.top3),
+            top5: normalizeTier(bandar.top5),
+            top10: normalizeTier(bandar.top10),
         },
         buyers: (summary.brokers_buy ?? []).map((e: any) => normalizeDetectorBroker(e, 'buy')),
         sellers: (summary.brokers_sell ?? []).map((e: any) => normalizeDetectorBroker(e, 'sell')),

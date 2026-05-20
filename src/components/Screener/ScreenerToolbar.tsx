@@ -23,11 +23,11 @@ export default function ScreenerToolbar() {
                 {/* Row 1: Data Source */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                     <div>
-                        <label className="text-sm font-medium text-dark-300 mb-2 block">Broker Code</label>
+                        <label className="text-sm font-medium text-dark-300 mb-2 block">Kode Broker</label>
                         <input
                             type="text"
-                            placeholder="e.g. AK"
-                            value={filters.brokerCode || 'AK'}
+                            placeholder="cth. AK"
+                            value={filters.brokerCode ?? ''}
                             onChange={(e) => handleFilterChange('brokerCode', e.target.value)}
                             className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
                         />
@@ -62,7 +62,7 @@ export default function ScreenerToolbar() {
                     </div>
 
                     <div>
-                        <label className="text-sm font-medium text-dark-300 mb-2 block">Min Buy Freq</label>
+                        <label className="text-sm font-medium text-dark-300 mb-2 block">Min Frek Beli</label>
                         <input
                             type="number"
                             placeholder="0"
@@ -76,7 +76,7 @@ export default function ScreenerToolbar() {
                 {/* Row 2: Advanced Filters */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label className="text-sm font-medium text-dark-300 mb-2 block">Min Net Value (M)</label>
+                        <label className="text-sm font-medium text-dark-300 mb-2 block">Min Net Value (jt)</label>
                         <input
                             type="number"
                             placeholder="Min"
@@ -87,7 +87,7 @@ export default function ScreenerToolbar() {
                     </div>
 
                     <div>
-                        <label className="text-sm font-medium text-dark-300 mb-2 block">Broker Filter (comma-sep)</label>
+                        <label className="text-sm font-medium text-dark-300 mb-2 block">Filter Broker (pisah koma)</label>
                         <input
                             type="text"
                             placeholder="AK,YP,BP"
@@ -98,10 +98,10 @@ export default function ScreenerToolbar() {
                     </div>
 
                     <div>
-                        <label className="text-sm font-medium text-dark-300 mb-2 block">Search</label>
+                        <label className="text-sm font-medium text-dark-300 mb-2 block">Cari Saham</label>
                         <input
                             type="text"
-                            placeholder="Search by code..."
+                            placeholder="Cari kode saham..."
                             onChange={(e) => setSearchText(e.target.value)}
                             className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
                         />

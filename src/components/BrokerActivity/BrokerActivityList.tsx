@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useBrokerActivity } from '@/hooks/use-queries'
 import { formatCurrency } from '@/services/api'
 import { parseBrokerActivity } from '@/utils/broker-activity'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
+import DateRangePicker, { DateRange } from '../DateRangePicker'
 import StockTransactionList from './StockTransactionList'
 
 const POPULAR_BROKERS = ['AK', 'CC', 'YP', 'MG', 'XL', 'PD', 'NI', 'ZP']
@@ -11,7 +12,28 @@ export default function BrokerActivityList() {
     const [inputCode, setInputCode] = useState('AK')
     const [brokerCode, setBrokerCode] = useState('AK')
 
-    const { data, isLoading, error, refetch, isFetching } = useBrokerActivity(brokerCode)
+    // Initialize date range with last 7 days
+    const defaultDateRange = useMemo(() => {
+        const to = new Date()
+        const from = new Date()
+        from.setDate(to.getDate() - 6)
+        return { from, to }
+    }, [])
+
+    const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange)
+
+    // Format dates for API
+    const formatDateForAPI = (date: Date): string => {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+    }
+
+    const { data, isLoading, error, refetch, isFetching } = useBrokerActivity(brokerCode, {
+        fromDate: formatDateForAPI(dateRange.from),
+        toDate: formatDateForAPI(dateRange.to),
+    })
 
     const applyBroker = (code?: string) => {
         const next = (code || inputCode).trim().toUpperCase()
@@ -32,45 +54,47 @@ export default function BrokerActivityList() {
                 <p className="text-sm text-dark-400 mb-3">
                     Lihat saham yang dibeli & dijual oleh broker tertentu (data transaksi harian).
                 </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <input
-                        type="text"
-                        value={inputCode}
-                        onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                        onKeyDown={(e) => e.key === 'Enter' && applyBroker()}
-                        placeholder="Kode broker, mis. AK"
-                        className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
-                    />
-                    <button
-                        type="button"
-                        onClick={() => applyBroker()}
-                        className="px-6 py-2.5 bg-accent-green text-dark-950 font-semibold rounded-lg hover:bg-opacity-90 transition"
-                    >
-                        Tampilkan
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => refetch()}
-                        className="px-4 py-2.5 border border-dark-700 rounded-lg text-dark-300 hover:bg-dark-800 transition"
-                    >
-                        ⟳ Refresh
-                    </button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                    {POPULAR_BROKERS.map((code) => (
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <input
+                            type="text"
+                            value={inputCode}
+                            onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => e.key === 'Enter' && applyBroker()}
+                            placeholder="Kode broker, mis. AK"
+                            className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
+                        />
                         <button
-                            key={code}
                             type="button"
-                            onClick={() => applyBroker(code)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
-                                brokerCode === code
-                                    ? 'border-accent-green text-accent-green bg-accent-green/10'
-                                    : 'border-dark-700 text-dark-300 hover:border-dark-500'
-                            }`}
+                            onClick={() => applyBroker()}
+                            className="px-6 py-2.5 bg-accent-green text-dark-950 font-semibold rounded-lg hover:bg-opacity-90 transition"
                         >
-                            {code}
+                            Tampilkan
                         </button>
-                    ))}
+                        <button
+                            type="button"
+                            onClick={() => refetch()}
+                            className="px-4 py-2.5 border border-dark-700 rounded-lg text-dark-300 hover:bg-dark-800 transition"
+                        >
+                            ⟳ Refresh
+                        </button>
+                        <DateRangePicker value={dateRange} onChange={setDateRange} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {POPULAR_BROKERS.map((code) => (
+                            <button
+                                key={code}
+                                type="button"
+                                onClick={() => applyBroker(code)}
+                                className={`px-3 py-1 rounded-full text-xs font-medium border transition ${brokerCode === code
+                                        ? 'border-accent-green text-accent-green bg-accent-green/10'
+                                        : 'border-dark-700 text-dark-300 hover:border-dark-500'
+                                    }`}
+                            >
+                                {code}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </Card>
 

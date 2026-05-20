@@ -44,15 +44,23 @@ export function useBrokerRanking(
 
 export function useBrokerActivity(
     brokerCode: string,
-    options?: { enabled?: boolean; limit?: number; refetchInterval?: number }
+    options?: {
+        enabled?: boolean;
+        limit?: number;
+        refetchInterval?: number;
+        fromDate?: string;
+        toDate?: string;
+    }
 ): UseQueryResult<any, APIException> {
     const code = brokerCode.trim().toUpperCase()
     return useQuery({
-        queryKey: ['broker', 'activity', code, options?.limit],
+        queryKey: ['broker', 'activity', code, options?.limit, options?.fromDate, options?.toDate],
         queryFn: async () =>
             fetchBrokerActivity({
                 brokerCode: code,
                 limit: options?.limit ?? 50,
+                fromDate: options?.fromDate,
+                toDate: options?.toDate,
             }),
         staleTime: 60 * 1000,
         gcTime: 5 * 60 * 1000,
@@ -127,7 +135,7 @@ export function useIHSGChart(
 
 export function useOrderbook(
     symbol: string,
-    options?: { enabled?: boolean; refetchInterval?: number }
+    options?: { enabled?: boolean; refetchInterval?: number | false }
 ): UseQueryResult<any, APIException> {
     return useQuery({
         queryKey: ['orderbook', symbol],
@@ -137,7 +145,10 @@ export function useOrderbook(
         retry: 2,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
         enabled: options?.enabled !== false && !!symbol,
-        refetchInterval: options?.refetchInterval ?? 10 * 1000,
+        // Jika refetchInterval di-pass (termasuk false), gunakan itu; default 10s
+        refetchInterval: options && 'refetchInterval' in options
+            ? options.refetchInterval
+            : 10 * 1000,
     })
 }
 

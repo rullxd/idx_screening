@@ -61,14 +61,22 @@ export interface StockDetail extends Stock {
 export interface ScreeningResult {
     code: string
     close: number
-    change: number
+    change?: number
     spread?: number
     net_value: number
     net_lot: number
     buy_freq: number
+    sell_freq?: number
     foreign_net?: number
     brokers: string[]
-    accdist: 'Acc' | 'Dist' | 'Neutral'
+    // Computed broker stats
+    buy_brokers?: number
+    sell_brokers?: number
+    buy_avg_price?: number
+    sell_avg_price?: number
+    buy_value?: number
+    sell_value?: number
+    accdist: 'Strong Acc' | 'Acc' | 'Weak Acc' | 'Neutral' | 'Weak Dist' | 'Dist' | 'Strong Dist'
     score?: number
     volume?: number
     sector?: string

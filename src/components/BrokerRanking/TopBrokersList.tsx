@@ -9,9 +9,10 @@ interface TopBrokersListProps {
 }
 
 export default function TopBrokersList({ title, brokers, type }: TopBrokersListProps) {
-    const getColor = (broker: Broker) => {
-        const isForeign = broker.group === 'BROKER_GROUP_FOREIGN'
-        return isForeign ? 'text-blue-400' : 'text-yellow-400'
+    const getGroupStyle = (broker: Broker): { color: string; label: string } => {
+        if (broker.group === 'BROKER_GROUP_FOREIGN') return { color: 'text-accent-blue', label: '🌍 Asing' }
+        if (broker.group === 'BROKER_GROUP_GOVERNMENT') return { color: 'text-accent-green', label: '🏛 Pemerintah' }
+        return { color: 'text-accent-yellow', label: '🏠 Lokal' }
     }
 
     return (
@@ -27,6 +28,8 @@ export default function TopBrokersList({ title, brokers, type }: TopBrokersListP
                 ) : (
                     brokers.map((broker, idx) => {
                         const value = type === 'buy' ? broker.buy_value : broker.sell_value
+                        const { color, label } = getGroupStyle(broker)
+                        const isPositiveNet = broker.net_value >= 0
 
                         return (
                             <div
@@ -40,13 +43,14 @@ export default function TopBrokersList({ title, brokers, type }: TopBrokersListP
 
                                 {/* Code & Name */}
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex items-baseline gap-2">
-                                        <span className="font-semibold text-dark-100">{broker.code}</span>
-                                        <span className={`text-xs font-medium ${getColor(broker)}`}>
-                                            {broker.group === 'BROKER_GROUP_FOREIGN' ? '🌍 Foreign' : '🏠 Lokal'}
-                                        </span>
+                                    <div className="flex items-baseline gap-2 flex-wrap">
+                                        <span className="font-bold text-dark-100 text-sm">{broker.code}</span>
+                                        <span className={`text-[10px] font-medium ${color}`}>{label}</span>
                                     </div>
                                     <div className="text-xs text-dark-500 truncate">{broker.name}</div>
+                                    <div className={`text-[10px] mt-0.5 tabular-nums ${isPositiveNet ? 'text-accent-green' : 'text-accent-red'}`}>
+                                        Net: {isPositiveNet ? '+' : ''}{formatCurrency(broker.net_value)}
+                                    </div>
                                 </div>
 
                                 {/* Value */}

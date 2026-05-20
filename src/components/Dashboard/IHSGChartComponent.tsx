@@ -61,17 +61,9 @@ export default function IHSGChartComponent() {
     const gradientColor = trend === 'naik' ? '#10b981' : '#ef4444'
 
     if (!chartData || chartData.length === 0) {
-        const getKeys = (obj: any) => {
-            try {
-                return Object.keys(obj || {}).slice(0, 5).join(',');
-            } catch {
-                return 'err';
-            }
-        };
-        const debugInfo = `data:${data ? `{${getKeys(data)}}` : 'null'} hasData.data:${!!data?.data} len:${Array.isArray(data) ? (data as any[]).length : 'N/A'}`
         return (
             <Card className="p-6">
-                <p className="text-dark-400 text-center text-xs">Tidak ada data ({debugInfo})</p>
+                <p className="text-dark-400 text-center text-sm">Tidak ada data chart untuk timeframe {selectedTimeframe.toUpperCase()}</p>
             </Card>
         )
     }

@@ -35,19 +35,19 @@ export default function ScreenerSummaryCards() {
             <Card className="p-3 border-l-4 border-accent-blue">
                 <p className="text-dark-500 text-xs font-semibold">TOTAL NET BUY</p>
                 <p className="text-xl font-bold text-accent-blue mt-1">{formatCurrency(totalNetBuy)}</p>
-                <p className="text-dark-500 text-xs mt-1">all stocks</p>
+                <p className="text-dark-500 text-xs mt-1">semua saham</p>
             </Card>
 
             <Card className="p-3 border-l-4 border-accent-cyan">
-                <p className="text-dark-500 text-xs font-semibold">AVG NET</p>
+                <p className="text-dark-500 text-xs font-semibold">RATA-RATA NET</p>
                 <p className="text-xl font-bold text-accent-cyan mt-1">{formatCurrency(avgNetValue)}</p>
-                <p className="text-dark-500 text-xs mt-1">per stock</p>
+                <p className="text-dark-500 text-xs mt-1">per saham</p>
             </Card>
 
             <Card className="p-3 border-l-4 border-dark-600">
                 <p className="text-dark-500 text-xs font-semibold">SCREENED</p>
                 <p className="text-xl font-bold text-dark-100 mt-1">{filteredResults.length}</p>
-                <p className="text-dark-500 text-xs mt-1">{totalBrokers} brokers</p>
+                <p className="text-dark-500 text-xs mt-1">{totalBrokers} broker aktif</p>
             </Card>
         </div>
     )

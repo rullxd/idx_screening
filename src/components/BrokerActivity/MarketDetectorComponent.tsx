@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useMarketDetector } from '@/hooks/use-queries'
 import { formatBigNumber, formatCurrency } from '@/services/api'
-import { parseMarketDetector } from '@/utils/broker-activity'
+import { parseMarketDetector, BandarTierData } from '@/utils/broker-activity'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 import BrokerFlowList from './BrokerFlowList'
+import clsx from 'clsx'
 
 export default function MarketDetectorComponent() {
     const [inputCode, setInputCode] = useState('BNBR')
@@ -22,6 +23,7 @@ export default function MarketDetectorComponent() {
     const topBuyers = [...parsed.buyers].sort((a, b) => b.value - a.value).slice(0, 25)
     const topSellers = [...parsed.sellers].sort((a, b) => b.value - a.value).slice(0, 25)
     const summary = parsed.summary
+    const tiers = parsed.tiers
 
     return (
         <div className="space-y-6">
@@ -76,15 +78,35 @@ export default function MarketDetectorComponent() {
                         isFetching={isFetching}
                     />
 
+                    {/* Summary Cards */}
                     {summary && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                            <SummaryCard label="Nilai" value={formatCurrency(summary.totalValue)} />
-                            <SummaryCard label="Volume" value={formatBigNumber(summary.totalVolume)} />
-                            <SummaryCard label="Avg Acc/Dist" value={summary.accdist} />
-                            <SummaryCard label="Broker Acc/Dist" value={summary.brokerAccdist} />
-                            <SummaryCard label="Buyer" value={String(summary.totalBuyers)} className="text-accent-green" />
-                            <SummaryCard label="Seller" value={String(summary.totalSellers)} className="text-accent-red" />
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <SummaryCard label="Total Nilai" value={formatCurrency(summary.totalValue)} />
+                            <SummaryCard label="Total Volume" value={formatBigNumber(summary.totalVolume)} />
+                            <SummaryCard label="Jumlah Broker" value={String(summary.numberBrokerBuySell)} />
+                            <SummaryCard label="Rata-rata" value={formatBigNumber(summary.average)} />
+                            <SummaryCard label="Avg Acc/Dist" value={summary.accdist} className={accdistColor(summary.accdist)} />
+                            <SummaryCard label="Broker Acc/Dist" value={summary.brokerAccdist} className={accdistColor(summary.brokerAccdist)} />
+                            <SummaryCard label="Pembeli" value={String(summary.totalBuyers)} className="text-accent-green" />
+                            <SummaryCard label="Penjual" value={String(summary.totalSellers)} className="text-accent-red" />
                         </div>
+                    )}
+
+                    {/* Bandar Tier Analysis */}
+                    {tiers && (
+                        <Card className="p-4">
+                            <h4 className="text-sm font-semibold text-dark-200 mb-3">
+                                📊 Analisis Konsentrasi Bandar
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+                                <TierCard label="Avg" tier={tiers.avg} />
+                                <TierCard label="Avg5" tier={tiers.avg5} />
+                                <TierCard label="Top 1" tier={tiers.top1} />
+                                <TierCard label="Top 3" tier={tiers.top3} />
+                                <TierCard label="Top 5" tier={tiers.top5} />
+                                <TierCard label="Top 10" tier={tiers.top10} />
+                            </div>
+                        </Card>
                     )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -93,6 +115,29 @@ export default function MarketDetectorComponent() {
                     </div>
                 </>
             )}
+        </div>
+    )
+}
+
+function accdistColor(val: string): string {
+    const v = val?.toLowerCase()
+    if (v?.includes('acc') || v === 'a') return 'text-accent-green'
+    if (v?.includes('dist') || v === 'd') return 'text-accent-red'
+    return 'text-dark-300'
+}
+
+function TierCard({ label, tier }: { label: string; tier: BandarTierData }) {
+    const isAcc = tier.accdist?.toLowerCase().includes('acc') || tier.accdist === 'A'
+    const isDist = tier.accdist?.toLowerCase().includes('dist') || tier.accdist === 'D'
+    const borderColor = isAcc ? 'border-accent-green' : isDist ? 'border-accent-red' : 'border-dark-700'
+    const textColor = isAcc ? 'text-accent-green' : isDist ? 'text-accent-red' : 'text-dark-300'
+
+    return (
+        <div className={clsx('p-3 rounded-lg bg-dark-800 border-l-2', borderColor)}>
+            <p className="text-dark-500 text-[10px] font-semibold uppercase tracking-wide">{label}</p>
+            <p className={clsx('text-sm font-bold mt-1', textColor)}>{tier.accdist}</p>
+            <p className="text-dark-400 text-[10px] mt-1 tabular-nums">{tier.percent.toFixed(1)}%</p>
+            <p className="text-dark-500 text-[10px] tabular-nums">{formatCurrency(tier.amount)}</p>
         </div>
     )
 }

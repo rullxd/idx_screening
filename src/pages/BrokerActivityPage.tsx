@@ -15,21 +15,21 @@ export default function BrokerActivityPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 border-b border-dark-800">
+            <div className="flex gap-2">
                 <button
                     onClick={() => setActiveTab('list')}
-                    className={`px-4 py-3 font-semibold transition-colors ${activeTab === 'list'
-                            ? 'text-accent-green border-b-2 border-accent-green'
-                            : 'text-dark-400 hover:text-dark-100'
+                    className={`px-4 py-2.5 rounded-lg font-semibold transition-all duration-200 border ${activeTab === 'list'
+                            ? 'bg-accent-green/10 border-accent-green text-accent-green'
+                            : 'text-dark-400 border-transparent hover:bg-dark-800 hover:text-dark-100'
                         }`}
                 >
-                    🏦 Broker List
+                    🏦 Daftar Broker
                 </button>
                 <button
                     onClick={() => setActiveTab('detector')}
-                    className={`px-4 py-3 font-semibold transition-colors ${activeTab === 'detector'
-                            ? 'text-accent-green border-b-2 border-accent-green'
-                            : 'text-dark-400 hover:text-dark-100'
+                    className={`px-4 py-2.5 rounded-lg font-semibold transition-all duration-200 border ${activeTab === 'detector'
+                            ? 'bg-accent-green/10 border-accent-green text-accent-green'
+                            : 'text-dark-400 border-transparent hover:bg-dark-800 hover:text-dark-100'
                         }`}
                 >
                     🔬 Market Detector

@@ -165,20 +165,20 @@ function transformBrokerActivityToScreening(rawData: any): any[] {
 
             return {
                 code,
-                close: buyPrice || sellPrice || 0,
-                open: sellPrice,
-                spread: (buyPrice || 0) - (sellPrice || 0),
+                close: 0,          // harga live diambil dari /api/orderbook di ScreenerRow
                 net_value: netValue,
                 net_lot: buyLot - sellLot,
                 buy_freq: buyFreq,
                 sell_freq: sellFreq,
-                foreign_buy: 0,
+                buy_avg_price: buyPrice,  // avg harga beli broker (referensi internal)
+                sell_avg_price: sellPrice, // avg harga jual broker (referensi internal)
                 buy_brokers: data.buy.length,
                 sell_brokers: data.sell.length,
                 accdist,
                 score,
                 buy_value: buyValue,
                 sell_value: sellValue,
+                brokers: [],       // field wajib dari ScreeningResult type
             }
         })
 
@@ -300,16 +300,18 @@ export async function fetchMarketDetector(
 // ============= HELPER FUNCTIONS =============
 
 /**
- * Format large numbers for display (T/M/jt format)
+ * Format large numbers for display (T/M/rb format)
  */
 export function formatBigNumber(value: number | string): string {
     const num = typeof value === 'string' ? parseFloat(value) : value
-    if (isNaN(num)) return '0'
-    if (num === 0) return '0'
-    if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(1) + 'T'
-    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M'
-    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'jt'
-    return num.toFixed(0)
+    if (isNaN(num) || num === 0) return '0'
+    const abs = Math.abs(num)
+    const sign = num < 0 ? '-' : ''
+    if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}T`
+    if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(1)}M`
+    if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}jt`
+    if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}rb`
+    return `${sign}${abs.toFixed(0)}`
 }
 
 /**

@@ -18,31 +18,31 @@ export default function RankingSummaryCards({
     const summaryItems = [
         {
             label: 'TOP BUYER',
-            value: topBuyer?.name || '—',
+            value: topBuyer ? `${topBuyer.code} · ${topBuyer.name}` : '—',
             subvalue: topBuyer ? formatCurrency(topBuyer.buy_value) : '—',
             icon: '🟢',
-            color: 'border-green-500',
+            color: 'border-accent-green',
         },
         {
             label: 'TOP SELLER',
-            value: topSeller?.name || '—',
+            value: topSeller ? `${topSeller.code} · ${topSeller.name}` : '—',
             subvalue: topSeller ? formatCurrency(topSeller.sell_value) : '—',
             icon: '🔴',
-            color: 'border-red-500',
+            color: 'border-accent-red',
         },
         {
-            label: 'FOREIGN NET FLOW',
+            label: 'NET FLOW ASING',
             value: formatCurrency(foreignNetFlow),
-            subvalue: foreignNetFlow >= 0 ? 'BUYING' : 'SELLING',
+            subvalue: foreignNetFlow >= 0 ? 'NET BUY' : 'NET SELL',
             icon: '🔵',
-            color: foreignNetFlow >= 0 ? 'border-blue-500' : 'border-orange-500',
+            color: foreignNetFlow >= 0 ? 'border-accent-blue' : 'border-accent-red',
         },
         {
-            label: 'LOCAL NET FLOW',
+            label: 'NET FLOW LOKAL',
             value: formatCurrency(localNetFlow),
-            subvalue: localNetFlow >= 0 ? 'BUYING' : 'SELLING',
+            subvalue: localNetFlow >= 0 ? 'NET BUY' : 'NET SELL',
             icon: '🟡',
-            color: localNetFlow >= 0 ? 'border-yellow-500' : 'border-purple-500',
+            color: localNetFlow >= 0 ? 'border-accent-yellow' : 'border-accent-red',
         },
     ]
 

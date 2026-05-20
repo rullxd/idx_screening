@@ -86,12 +86,17 @@ export default function HeatmapPage() {
                     {results.slice(0, 100).map((stock: any, idx: number) => (
                         <div
                             key={idx}
-                            className={`w-full aspect-square rounded flex items-center justify-center text-xs font-bold text-dark-950 cursor-pointer hover:scale-110 transition ${getScoreColor(
+                            className={`w-full aspect-square rounded flex flex-col items-center justify-center cursor-pointer hover:scale-110 transition ${getScoreColor(
                                 stock.score || 0
                             )}`}
-                            title={`${stock.code} - Score: ${(stock.score || 0).toFixed(1)}`}
+                            title={`${stock.code} | Score: ${(stock.score || 0).toFixed(1)} | ${stock.accdist || '—'}`}
                         >
-                            {stock.code.charAt(0)}
+                            <span className="text-[9px] font-bold text-dark-950 leading-tight text-center px-0.5 truncate w-full text-center">
+                                {stock.code.substring(0, 4)}
+                            </span>
+                            <span className="text-[8px] text-dark-950/70 leading-none">
+                                {(stock.score || 0).toFixed(0)}
+                            </span>
                         </div>
                     ))}
                 </div>

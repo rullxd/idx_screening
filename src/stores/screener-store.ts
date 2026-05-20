@@ -94,7 +94,19 @@ export const useScreenerStore = create<ScreenerState>((set, get) => ({
 
         // Apply filters
         if (state.filters.accdist && state.filters.accdist !== 'ALL') {
-            filtered = filtered.filter((r) => r.accdist === state.filters.accdist)
+            if (state.filters.accdist === 'Acc') {
+                // Match semua varian akumulasi
+                filtered = filtered.filter((r) =>
+                    r.accdist === 'Acc' || r.accdist === 'Strong Acc' || r.accdist === 'Weak Acc'
+                )
+            } else if (state.filters.accdist === 'Dist') {
+                // Match semua varian distribusi
+                filtered = filtered.filter((r) =>
+                    r.accdist === 'Dist' || r.accdist === 'Strong Dist' || r.accdist === 'Weak Dist'
+                )
+            } else {
+                filtered = filtered.filter((r) => r.accdist === state.filters.accdist)
+            }
         }
 
         if (state.filters.minScore) {
