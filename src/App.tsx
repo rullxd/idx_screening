@@ -4,7 +4,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import MarketPage from '@/pages/MarketPage'
 import ScreenerPage from '@/pages/ScreenerPage'
 import BrokerActivityPage from '@/pages/BrokerActivityPage'
-import BrokerRankingPage from '@/pages/BrokerRankingPage'
+import SignalScannerPage from '@/pages/SignalScannerPage'
 import AlertsPage from '@/pages/AlertsPage'
 import HeatmapPage from '@/pages/HeatmapPage'
 import { useMonitorSignificantChanges } from '@/hooks/use-monitor'
@@ -21,7 +21,7 @@ export default function App() {
                 <Route path="/market" element={<MarketPage />} />
                 <Route path="/screener" element={<ScreenerPage />} />
                 <Route path="/broker-activity" element={<BrokerActivityPage />} />
-                <Route path="/broker-ranking" element={<BrokerRankingPage />} />
+                <Route path="/signals" element={<SignalScannerPage />} />
                 <Route path="/alerts" element={<AlertsPage />} />
                 <Route path="/heatmap" element={<HeatmapPage />} />
                 {/* Fallback route */}

@@ -6,7 +6,7 @@ const navigationItems = [
     { path: '/market', label: 'Market', icon: '📉' },
     { path: '/screener', label: 'Bandar Screener', icon: '🎯' },
     { path: '/broker-activity', label: 'Broker Activity', icon: '🏦' },
-    { path: '/broker-ranking', label: 'Broker Ranking', icon: '📈' },
+    { path: '/signals', label: 'Signal Scanner', icon: '📡' },
     { path: '/alerts', label: 'Alert & Signals', icon: '🔔' },
     { path: '/heatmap', label: 'Heatmap Bandar', icon: '🔥' },
 ]
