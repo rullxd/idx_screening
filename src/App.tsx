@@ -1,5 +1,4 @@
-import { useMemo } from 'react'
-import { useUIStore } from '@/stores/ui-store'
+import { Routes, Route, Navigate } from 'react-router-dom' // Import Routes & Route
 import Layout from '@/components/Layout'
 import DashboardPage from '@/pages/DashboardPage'
 import MarketPage from '@/pages/MarketPage'
@@ -14,32 +13,20 @@ export default function App() {
     // Jalankan pemantauan perubahan pasar secara global
     useMonitorSignificantChanges()
 
-    const currentPage = useUIStore((state) => state.currentPage)
-
-    const PageComponent = useMemo(() => {
-        switch (currentPage) {
-            case 'dashboard':
-                return DashboardPage
-            case 'market':
-                return MarketPage
-            case 'screener':
-                return ScreenerPage
-            case 'broker-activity':
-                return BrokerActivityPage
-            case 'broker-ranking':
-                return BrokerRankingPage
-            case 'alerts':
-                return AlertsPage
-            case 'heatmap':
-                return HeatmapPage
-            default:
-                return DashboardPage
-        }
-    }, [currentPage])
-
     return (
         <Layout>
-            <PageComponent />
+            <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/market" element={<MarketPage />} />
+                <Route path="/screener" element={<ScreenerPage />} />
+                <Route path="/broker-activity" element={<BrokerActivityPage />} />
+                <Route path="/broker-ranking" element={<BrokerRankingPage />} />
+                <Route path="/alerts" element={<AlertsPage />} />
+                <Route path="/heatmap" element={<HeatmapPage />} />
+                {/* Fallback route */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
         </Layout>
     )
 }

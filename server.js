@@ -12,8 +12,42 @@ const PORT = 3000;
 // Get __dirname in ES module
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const MAX_CACHE_SIZE = 200; // LRU cache limit
 const responseCache = new Map();
 const streamManagers = new Map();
+
+// Simple rate limiter (per IP, max 60 requests per minute)
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 60;
+
+function rateLimiter(req, res, next) {
+    const ip = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    const entry = rateLimitMap.get(ip);
+
+    if (!entry || now - entry.start > RATE_LIMIT_WINDOW) {
+        rateLimitMap.set(ip, { start: now, count: 1 });
+        return next();
+    }
+
+    entry.count++;
+    if (entry.count > RATE_LIMIT_MAX) {
+        return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+
+    return next();
+}
+
+// Clean up expired rate limit entries every 5 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of rateLimitMap) {
+        if (now - entry.start > RATE_LIMIT_WINDOW) {
+            rateLimitMap.delete(ip);
+        }
+    }
+}, 5 * 60 * 1000);
 const CACHE_TTL = {
     brokerActivity: 60 * 1000,
     marketDetector: 60 * 1000,
@@ -125,6 +159,13 @@ async function fetchJsonWithCache({ cacheKey, ttlMs, url, headers, logLabel }) {
     }
 
     const data = await response.json();
+
+    // LRU eviction: remove oldest entries when cache exceeds max size
+    if (responseCache.size >= MAX_CACHE_SIZE) {
+        const oldestKey = responseCache.keys().next().value;
+        responseCache.delete(oldestKey);
+    }
+
     responseCache.set(cacheKey, {
         data,
         expiresAt: now + ttlMs
@@ -136,6 +177,7 @@ async function fetchJsonWithCache({ cacheKey, ttlMs, url, headers, logLabel }) {
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/api', rateLimiter); // Apply rate limiting to API routes only
 app.use(express.static(path.join(__dirname)));
 
 // Load TOKEN from .env
@@ -489,8 +531,8 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });
 });
 
-// Serve index.html for root
-app.get('/', (req, res) => {
+// SPA fallback: serve index.html for all non-API routes
+app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 

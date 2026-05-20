@@ -1,20 +1,17 @@
-import { useUIStore } from '@/stores/ui-store'
+import { NavLink } from 'react-router-dom'
 import clsx from 'clsx'
 
 const navigationItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'market', label: 'Market', icon: '📉' },
-    { id: 'screener', label: 'Bandar Screener', icon: '🎯' },
-    { id: 'broker-activity', label: 'Broker Activity', icon: '🏦' },
-    { id: 'broker-ranking', label: 'Broker Ranking', icon: '📈' },
-    { id: 'alerts', label: 'Alert & Signals', icon: '🔔' },
-    { id: 'heatmap', label: 'Heatmap Bandar', icon: '🔥' },
+    { path: '/dashboard', label: 'Dashboard', icon: '📊' },
+    { path: '/market', label: 'Market', icon: '📉' },
+    { path: '/screener', label: 'Bandar Screener', icon: '🎯' },
+    { path: '/broker-activity', label: 'Broker Activity', icon: '🏦' },
+    { path: '/broker-ranking', label: 'Broker Ranking', icon: '📈' },
+    { path: '/alerts', label: 'Alert & Signals', icon: '🔔' },
+    { path: '/heatmap', label: 'Heatmap Bandar', icon: '🔥' },
 ]
 
 export default function Sidebar() {
-    const currentPage = useUIStore((state) => state.currentPage)
-    const setCurrentPage = useUIStore((state) => state.setCurrentPage)
-
     return (
         <nav className="hidden lg:flex lg:flex-col w-64 bg-dark-900 border-r border-dark-800 relative">
             <div className="flex-1 overflow-y-auto p-6">
@@ -24,20 +21,21 @@ export default function Sidebar() {
 
                 <div className="space-y-2">
                     {navigationItems.map((item) => (
-                        <button
-                            key={item.id}
-                            onClick={() => setCurrentPage(item.id as any)}
-                            className={clsx(
-                                'w-full text-left px-4 py-3 rounded-lg transition-all duration-200 flex items-center gap-3',
-                                currentPage === item.id
-                                    ? 'bg-accent-green bg-opacity-10 border border-accent-green text-accent-green'
-                                    : 'text-dark-400 hover:bg-dark-800 hover:text-dark-100 border border-transparent'
-                            )}
-                            aria-current={currentPage === item.id ? 'page' : undefined}
+                        <NavLink
+                            key={item.path}
+                            to={item.path}
+                            className={({ isActive }) =>
+                                clsx(
+                                    'w-full text-left px-4 py-3 rounded-lg transition-all duration-200 flex items-center gap-3',
+                                    isActive
+                                        ? 'bg-accent-green bg-opacity-10 border border-accent-green text-accent-green'
+                                        : 'text-dark-400 hover:bg-dark-800 hover:text-dark-100 border border-transparent'
+                                )
+                            }
                         >
                             <span className="text-lg">{item.icon}</span>
                             <span className="font-medium">{item.label}</span>
-                        </button>
+                        </NavLink>
                     ))}
                 </div>
             </div>
