@@ -8,6 +8,7 @@ const PRICE_ALERT_COOLDOWN_MS = 60 * 60 * 1000 // 60 menit
 const VOLUME_ALERT_COOLDOWN_MS = 45 * 60 * 1000 // 45 menit
 const FOREIGN_ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000 // 4 jam
 const TELEGRAM_DUPLICATE_WINDOW_MS = 15 * 60 * 1000 // 15 menit
+const TELEGRAM_MIN_SEND_INTERVAL_MS = 2 * 60 * 1000 // 2 menit
 
 interface StockSnapshot {
     symbol: string
@@ -74,6 +75,7 @@ export function useMonitorSignificantChanges(options: UseMonitorOptions = {}) {
     const alertedSymbols = useRef<Set<string>>(new Set())
     const alertCooldownUntil = useRef<Record<string, number>>({})
     const lastTelegramPayload = useRef<{ text: string; sentAt: number } | null>(null)
+    const lastTelegramSentAt = useRef<number>(0)
 
     const fetchStocks = useCallback(async () => {
         try {
@@ -103,6 +105,9 @@ export function useMonitorSignificantChanges(options: UseMonitorOptions = {}) {
             if (!marketOpen) {
                 console.log('[Monitor] ⏸️ Pasar tutup. Data mungkin tidak berubah. Tetap monitoring untuk EOD alerts...')
             }
+
+            const cycleTelegramMessages: string[] = []
+            const cycleGeneratedAlerts: MarketAlert[] = []
 
             let symbolsToMonitor: string[] = []
 
@@ -264,23 +269,15 @@ export function useMonitorSignificantChanges(options: UseMonitorOptions = {}) {
                         }
                     }
 
-                    if (telegramMessages.length > 0) {
-                        const fullMessage = `🔔 <b>Market Alert</b>\n\n` + telegramMessages.join('\n')
-                        const duplicatedPayload =
-                            lastTelegramPayload.current
-                            && lastTelegramPayload.current.text === fullMessage
-                            && (Date.now() - lastTelegramPayload.current.sentAt) < TELEGRAM_DUPLICATE_WINDOW_MS
+                    if (generatedAlerts.length > 0) {
+                        cycleGeneratedAlerts.push(...generatedAlerts)
+                    }
 
-                        if (settings.telegramEnabled && !duplicatedPayload) {
-                            await sendTelegramNotification(fullMessage)
-                            lastTelegramPayload.current = { text: fullMessage, sentAt: Date.now() }
-                        } else if (duplicatedPayload) {
-                            console.log('[Monitor] ⏭️ Skip Telegram: payload sama dalam window dedup')
-                        }
+                    if (telegramMessages.length > 0) {
+                        cycleTelegramMessages.push(...telegramMessages)
                     }
 
                     if (generatedAlerts.length > 0) {
-                        useAlertDataStore.getState().addAlerts(generatedAlerts)
                         console.log(`[Monitor] ✅ ${generatedAlerts.length} alert(s) untuk ${symbol}`)
                     }
 
@@ -294,6 +291,31 @@ export function useMonitorSignificantChanges(options: UseMonitorOptions = {}) {
                     console.error(`[Monitor] Gagal memproses saham ${symbol}:`, e)
                 }
             }
+
+            if (cycleGeneratedAlerts.length > 0) {
+                useAlertDataStore.getState().addAlerts(cycleGeneratedAlerts)
+            }
+
+            if (cycleTelegramMessages.length > 0 && settings.telegramEnabled) {
+                const uniqueMessages = Array.from(new Set(cycleTelegramMessages))
+                const fullMessage = `🔔 <b>Market Alert</b>\n\n` + uniqueMessages.join('\n')
+                const nowTs = Date.now()
+                const duplicatedPayload =
+                    lastTelegramPayload.current
+                    && lastTelegramPayload.current.text === fullMessage
+                    && (nowTs - lastTelegramPayload.current.sentAt) < TELEGRAM_DUPLICATE_WINDOW_MS
+                const sendInCooldown = (nowTs - lastTelegramSentAt.current) < TELEGRAM_MIN_SEND_INTERVAL_MS
+
+                if (duplicatedPayload) {
+                    console.log('[Monitor] ⏭️ Skip Telegram: payload sama dalam window dedup')
+                } else if (sendInCooldown) {
+                    console.log('[Monitor] ⏭️ Skip Telegram: global cooldown kirim aktif')
+                } else {
+                    await sendTelegramNotification(fullMessage)
+                    lastTelegramPayload.current = { text: fullMessage, sentAt: nowTs }
+                    lastTelegramSentAt.current = nowTs
+                }
+            }
         }
 
         const resetDaily = () => {
@@ -304,6 +326,7 @@ export function useMonitorSignificantChanges(options: UseMonitorOptions = {}) {
                 previousForeignNet.current = {}
                 alertCooldownUntil.current = {}
                 lastTelegramPayload.current = null
+                lastTelegramSentAt.current = 0
                 console.log('[Monitor] 🔄 Reset harian - alert history cleared')
             }
         }

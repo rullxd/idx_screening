@@ -1,6 +1,8 @@
 import { formatBigNumber, formatCurrency } from '@/utils/formatters'
 import { MarketDetectorBroker } from '@/utils/broker-activity'
+import { getBrokerTierInfo } from '@/data/broker-tiers'
 import { Card } from '@/components'
+import BrokerTierBadge from './BrokerTierBadge'
 import clsx from 'clsx'
 
 interface BrokerFlowListProps {
@@ -28,7 +30,8 @@ export default function BrokerFlowList({ title, items, side }: BrokerFlowListPro
                         <div
                             key={`${broker.code}-${idx}`}
                             className={clsx(
-                                'flex items-center gap-3 p-3 rounded-lg bg-dark-800 border border-dark-700 transition',
+                                'flex items-center gap-3 p-3 rounded-lg border transition',
+                                getTierRowClass(broker.code),
                                 borderHover
                             )}
                         >
@@ -37,8 +40,11 @@ export default function BrokerFlowList({ title, items, side }: BrokerFlowListPro
                             </span>
                             <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                                 <div>
-                                    <span className={clsx('font-bold', accent)}>{broker.code}</span>
-                                    <span className="ml-2 text-[10px] text-dark-400">{broker.investorType}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className={clsx('font-bold', accent)}>{broker.code}</span>
+                                        <BrokerTierBadge brokerCode={broker.code} />
+                                        <span className="text-[10px] text-dark-400">{broker.investorType}</span>
+                                    </div>
                                     <p className="text-[10px] text-dark-500 mt-0.5 tabular-nums">
                                         Avg{' '}
                                         {broker.avgPrice.toLocaleString('id-ID', {
@@ -61,4 +67,11 @@ export default function BrokerFlowList({ title, items, side }: BrokerFlowListPro
             </div>
         </Card>
     )
+}
+
+function getTierRowClass(brokerCode: string): string {
+    const tier = getBrokerTierInfo(brokerCode).tier
+    if (tier === 3) return 'bg-dark-800 border-accent-red/30'
+    if (tier === 2) return 'bg-dark-800 border-accent-blue/30'
+    return 'bg-dark-800 border-dark-700'
 }
