@@ -1,3 +1,5 @@
+import { getBrokerTierInfo } from '@/data/broker-tiers'
+
 export interface StockTransaction {
     stockCode: string
     brokerCode: string
@@ -101,6 +103,29 @@ export interface ParsedMarketDetector {
     sellers: MarketDetectorBroker[]
 }
 
+export type BandarmologySignalTone = 'bullish' | 'bearish' | 'neutral' | 'warning'
+
+export interface BandarmologySignal {
+    key: string
+    title: string
+    tone: BandarmologySignalTone
+    description: string
+}
+
+export interface BandarmologyInsight {
+    netFlow: number
+    buyRetailShare: number
+    sellRetailShare: number
+    buyerConcentration: number
+    sellerConcentration: number
+    crossingValue: number
+    fakeRetailBuyers: string[]
+    fakeRetailSellers: string[]
+    dominantBuyerTier: 'Retail' | 'Whale' | 'Bandar' | 'Mixed'
+    dominantSellerTier: 'Retail' | 'Whale' | 'Bandar' | 'Mixed'
+    signals: BandarmologySignal[]
+}
+
 function normalizeDetectorBroker(entry: any, side: 'buy' | 'sell'): MarketDetectorBroker {
     const isBuy = side === 'buy'
     return {
@@ -155,5 +180,162 @@ export function parseMarketDetector(raw: any): ParsedMarketDetector {
         },
         buyers: (summary.brokers_buy ?? []).map((e: any) => normalizeDetectorBroker(e, 'buy')),
         sellers: (summary.brokers_sell ?? []).map((e: any) => normalizeDetectorBroker(e, 'sell')),
+    }
+}
+
+function sumValue(items: MarketDetectorBroker[]): number {
+    return items.reduce((sum, item) => sum + item.value, 0)
+}
+
+function calculateTierShare(items: MarketDetectorBroker[], tier: 1 | 2 | 3): number {
+    const total = sumValue(items)
+    if (total <= 0) return 0
+    const tierValue = items
+        .filter((item) => getBrokerTierInfo(item.code).tier === tier)
+        .reduce((sum, item) => sum + item.value, 0)
+    return tierValue / total
+}
+
+function dominantTier(items: MarketDetectorBroker[]): 'Retail' | 'Whale' | 'Bandar' | 'Mixed' {
+    const total = sumValue(items)
+    if (total <= 0) return 'Mixed'
+
+    const shares = {
+        Retail: calculateTierShare(items, 1),
+        Whale: calculateTierShare(items, 2),
+        Bandar: calculateTierShare(items, 3),
+    }
+
+    if (shares.Bandar >= 0.45) return 'Bandar'
+    if (shares.Whale >= 0.45) return 'Whale'
+    if (shares.Retail >= 0.55) return 'Retail'
+    return 'Mixed'
+}
+
+function calculateConcentration(items: MarketDetectorBroker[], topN: number): number {
+    const total = sumValue(items)
+    if (total <= 0) return 0
+    const topValue = [...items]
+        .sort((a, b) => b.value - a.value)
+        .slice(0, topN)
+        .reduce((sum, item) => sum + item.value, 0)
+    return topValue / total
+}
+
+function crossingValue(buyers: MarketDetectorBroker[], sellers: MarketDetectorBroker[]): number {
+    const sellerByCode = new Map(sellers.map((item) => [item.code, item]))
+    let totalCrossing = 0
+
+    buyers.forEach((buyer) => {
+        const seller = sellerByCode.get(buyer.code)
+        if (!seller) return
+
+        const smaller = Math.min(buyer.value, seller.value)
+        const larger = Math.max(buyer.value, seller.value)
+        if (larger <= 0) return
+
+        const similarity = smaller / larger
+        if (similarity >= 0.75) {
+            totalCrossing += smaller
+        }
+    })
+
+    return totalCrossing
+}
+
+function findFakeRetail(items: MarketDetectorBroker[]): string[] {
+    return items
+        .filter((item) => {
+            const info = getBrokerTierInfo(item.code)
+            if (info.tier !== 1) return false
+            if (item.freq <= 0) return false
+            const valuePerClick = item.value / item.freq
+            return valuePerClick >= 50_000_000
+        })
+        .map((item) => item.code)
+}
+
+export function analyzeBandarmology(
+    buyers: MarketDetectorBroker[],
+    sellers: MarketDetectorBroker[]
+): BandarmologyInsight {
+    const buyTotal = sumValue(buyers)
+    const sellTotal = sumValue(sellers)
+    const netFlow = buyTotal - sellTotal
+    const buyRetailShare = calculateTierShare(buyers, 1)
+    const sellRetailShare = calculateTierShare(sellers, 1)
+    const buyerConcentration = calculateConcentration(buyers, 3)
+    const sellerConcentration = calculateConcentration(sellers, 3)
+    const crossing = crossingValue(buyers, sellers)
+    const crossingShare = buyTotal > 0 ? crossing / buyTotal : 0
+    const fakeRetailBuyers = findFakeRetail(buyers)
+    const fakeRetailSellers = findFakeRetail(sellers)
+    const dominantBuyerTier = dominantTier(buyers)
+    const dominantSellerTier = dominantTier(sellers)
+
+    const signals: BandarmologySignal[] = []
+
+    if (netFlow > 0 && buyerConcentration >= 0.45 && sellRetailShare >= 0.45) {
+        signals.push({
+            key: 'accumulation',
+            title: 'Akumulasi terdeteksi',
+            tone: 'bullish',
+            description:
+                'Top buyer terkonsentrasi dan sisi seller didominasi ritel. Ini mirip pola perpindahan barang dari banyak tangan ke sedikit tangan.',
+        })
+    }
+
+    if (netFlow < 0 && sellerConcentration >= 0.45 && buyRetailShare >= 0.45) {
+        signals.push({
+            key: 'distribution',
+            title: 'Distribusi terdeteksi',
+            tone: 'bearish',
+            description:
+                'Top seller sangat terkonsentrasi sementara penampung didominasi broker ritel. Risiko dump lanjutan meningkat.',
+        })
+    }
+
+    if (crossingShare >= 0.25) {
+        signals.push({
+            key: 'crossing',
+            title: 'Potensi crossing / volume semu',
+            tone: 'warning',
+            description:
+                'Ada broker yang muncul besar di buyer dan seller sekaligus dengan nilai mirip. Fokus ke NET, jangan terpancing gross volume.',
+        })
+    }
+
+    if (fakeRetailBuyers.length > 0 || fakeRetailSellers.length > 0) {
+        signals.push({
+            key: 'fake-retail',
+            title: 'Broker ritel berukuran paus',
+            tone: 'warning',
+            description:
+                'Value per frekuensi transaksi pada broker ritel terlalu besar. Kemungkinan ada akun besar yang menyamar sebagai arus ritel.',
+        })
+    }
+
+    if (signals.length === 0) {
+        signals.push({
+            key: 'neutral',
+            title: 'Belum ada anomali kuat',
+            tone: 'neutral',
+            description:
+                'Pola buy/sell relatif seimbang. Gunakan mode wait and see sampai ada dominasi aliran yang lebih jelas.',
+        })
+    }
+
+    return {
+        netFlow,
+        buyRetailShare,
+        sellRetailShare,
+        buyerConcentration,
+        sellerConcentration,
+        crossingValue: crossing,
+        fakeRetailBuyers,
+        fakeRetailSellers,
+        dominantBuyerTier,
+        dominantSellerTier,
+        signals,
     }
 }

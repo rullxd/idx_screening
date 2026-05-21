@@ -17,6 +17,14 @@ import { APIException } from '@/types'
  * Handles caching, loading, error, and refetch states
  */
 
+const MAX_RETRY_ATTEMPT = 2
+
+function shouldRetryQuery(failureCount: number, error: APIException): boolean {
+    // Do not hammer API when server already rate-limits us.
+    if (error?.code === 'HTTP_429') return false
+    return failureCount < MAX_RETRY_ATTEMPT
+}
+
 // ============= BROKER RANKING HOOK =============
 
 export function useBrokerRanking(
@@ -62,10 +70,12 @@ export function useBrokerActivity(
                 fromDate: options?.fromDate,
                 toDate: options?.toDate,
             }),
-        staleTime: 60 * 1000,
+        staleTime: 2 * 60 * 1000,
         gcTime: 5 * 60 * 1000,
-        retry: 2,
+        retry: shouldRetryQuery,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         enabled: options?.enabled !== false && code.length >= 2,
         refetchInterval: options?.refetchInterval,
     })
@@ -230,9 +240,12 @@ export function useMarketDetector(
         },
         staleTime: 60 * 1000, // 1 minute
         gcTime: 5 * 60 * 1000,
-        retry: 2,
+        retry: shouldRetryQuery,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         enabled: options?.enabled !== false && !!stockCode,
-        refetchInterval: options?.refetchInterval || 60000, // Refresh every minute
+        refetchInterval: options?.refetchInterval || 2 * 60 * 1000, // Refresh every 2 minutes
+        refetchIntervalInBackground: false,
     })
 }

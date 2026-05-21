@@ -49,36 +49,38 @@ export default function BrokerActivityList() {
     const netFlow = totalBuy - totalSell
 
     return (
-        <div className="space-y-6">
-            <Card className="p-4">
+        <div className="space-y-5 md:space-y-6">
+            <Card className="p-3 md:p-4">
                 <p className="text-sm text-dark-400 mb-3">
                     Lihat saham yang dibeli & dijual oleh broker tertentu (data transaksi harian).
                 </p>
                 <div className="flex flex-col gap-4">
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
                         <input
                             type="text"
                             value={inputCode}
                             onChange={(e) => setInputCode(e.target.value.toUpperCase())}
                             onKeyDown={(e) => e.key === 'Enter' && applyBroker()}
                             placeholder="Kode broker, mis. AK"
-                            className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
+                            className="w-full xl:flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
                         />
-                        <button
-                            type="button"
-                            onClick={() => applyBroker()}
-                            className="px-6 py-2.5 bg-accent-green text-dark-950 font-semibold rounded-lg hover:bg-opacity-90 transition"
-                        >
-                            Tampilkan
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => refetch()}
-                            className="px-4 py-2.5 border border-dark-700 rounded-lg text-dark-300 hover:bg-dark-800 transition"
-                        >
-                            ⟳ Refresh
-                        </button>
-                        <DateRangePicker value={dateRange} onChange={setDateRange} />
+                        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => applyBroker()}
+                                className="px-6 py-2.5 bg-accent-green text-dark-950 font-semibold rounded-lg hover:bg-opacity-90 transition"
+                            >
+                                Tampilkan
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => refetch()}
+                                className="px-4 py-2.5 border border-dark-700 rounded-lg text-dark-300 hover:bg-dark-800 transition"
+                            >
+                                ⟳ Refresh
+                            </button>
+                            <DateRangePicker value={dateRange} onChange={setDateRange} />
+                        </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {POPULAR_BROKERS.map((code) => (
@@ -87,8 +89,8 @@ export default function BrokerActivityList() {
                                 type="button"
                                 onClick={() => applyBroker(code)}
                                 className={`px-3 py-1 rounded-full text-xs font-medium border transition ${brokerCode === code
-                                        ? 'border-accent-green text-accent-green bg-accent-green/10'
-                                        : 'border-dark-700 text-dark-300 hover:border-dark-500'
+                                    ? 'border-accent-green text-accent-green bg-accent-green/10'
+                                    : 'border-dark-700 text-dark-300 hover:border-dark-500'
                                     }`}
                             >
                                 {code}
@@ -130,7 +132,7 @@ export default function BrokerActivityList() {
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                         <StockTransactionList title="🟢 Saham Dibeli" items={buys} side="buy" />
                         <StockTransactionList title="🔴 Saham Dijual" items={sells} side="sell" />
                     </div>

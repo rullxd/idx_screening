@@ -24,7 +24,7 @@ export default function Layout({ children }: LayoutProps) {
                         sidebarOpen ? 'ml-0' : 'ml-0'
                     )}
                 >
-                    <div className="p-4 md:p-6 max-w-7xl mx-auto">
+                    <div className="w-full max-w-[1560px] mx-auto px-4 py-4 md:px-6 md:py-5">
                         {children}
                     </div>
                 </main>

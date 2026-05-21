@@ -131,10 +131,20 @@ class APIClient {
         if (error.response) {
             // Server responded with error status
             const data = error.response.data as any
+            const message =
+                data?.error?.message ||
+                (typeof data?.error === 'string' ? data.error : undefined) ||
+                data?.message ||
+                error.message ||
+                'Server error'
             return new APIException(
                 data?.error?.code || `HTTP_${error.response.status}`,
-                data?.error?.message || error.message || 'Server error',
-                data?.error?.details
+                message,
+                {
+                    ...(data?.error?.details || {}),
+                    status: error.response.status,
+                    retryAfter: error.response.headers?.['retry-after'],
+                }
             )
         } else if (error.request) {
             // Request made but no response

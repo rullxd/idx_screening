@@ -19,6 +19,7 @@ export default function DateRangePicker({
     const [isOpen, setIsOpen] = useState(false)
     const [tempFrom, setTempFrom] = useState<Date>(value.from)
     const [tempTo, setTempTo] = useState<Date>(value.to)
+    const [isSelectingEnd, setIsSelectingEnd] = useState(false)
     const [currentMonth, setCurrentMonth] = useState<Date>(new Date(value.to))
     const containerRef = useRef<HTMLDivElement>(null)
 
@@ -65,18 +66,28 @@ export default function DateRangePicker({
     const handleDateClick = (day: number) => {
         const selected = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day)
 
-        if (isSameDay(tempFrom, tempTo) || selected < tempFrom) {
+        if (!isSelectingEnd) {
             setTempFrom(selected)
             setTempTo(selected)
+            setIsSelectingEnd(true)
+            return
+        }
+
+        if (selected < tempFrom) {
+            setTempTo(tempFrom)
+            setTempFrom(selected)
         } else {
             setTempTo(selected)
         }
+
+        setIsSelectingEnd(false)
     }
 
     const handleApply = () => {
         const from = new Date(Math.min(tempFrom.getTime(), tempTo.getTime()))
         const to = new Date(Math.max(tempFrom.getTime(), tempTo.getTime()))
         onChange({ from, to })
+        setIsSelectingEnd(false)
         setIsOpen(false)
     }
 
@@ -88,7 +99,19 @@ export default function DateRangePicker({
         setTempFrom(from)
         setTempTo(to)
         setCurrentMonth(new Date(to))
+        setIsSelectingEnd(false)
         setIsOpen(false)
+    }
+
+    const handleToggle = () => {
+        if (!isOpen) {
+            setTempFrom(value.from)
+            setTempTo(value.to)
+            setCurrentMonth(new Date(value.to))
+            setIsSelectingEnd(false)
+        }
+
+        setIsOpen((prev) => !prev)
     }
 
     const handleMonthChange = (offset: number) => {
@@ -119,10 +142,10 @@ export default function DateRangePicker({
                     key={day}
                     onClick={() => handleDateClick(day)}
                     className={`py-2 text-sm font-medium rounded transition ${isStart || isEnd
-                            ? 'bg-accent-green text-dark-950 font-bold'
-                            : inRange
-                                ? 'bg-accent-green/30 text-accent-green'
-                                : 'text-dark-300 hover:bg-dark-700'
+                        ? 'bg-accent-green text-dark-950 font-bold'
+                        : inRange
+                            ? 'bg-accent-green/30 text-accent-green'
+                            : 'text-dark-300 hover:bg-dark-700'
                         }`}
                 >
                     {day}
@@ -137,7 +160,7 @@ export default function DateRangePicker({
         <div ref={containerRef} className="relative">
             {/* Display Button */}
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={handleToggle}
                 className="flex items-center gap-2 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 hover:border-accent-green transition"
             >
                 <span className="text-sm font-medium">
@@ -221,6 +244,7 @@ export default function DateRangePicker({
                             onClick={() => {
                                 setTempFrom(value.from)
                                 setTempTo(value.to)
+                                setIsSelectingEnd(false)
                                 setIsOpen(false)
                             }}
                             className="flex-1 px-4 py-2 text-sm font-medium rounded border border-dark-700 text-dark-300 hover:bg-dark-700 transition"

@@ -33,6 +33,8 @@ function rateLimiter(req, res, next) {
 
     entry.count++;
     if (entry.count > RATE_LIMIT_MAX) {
+        const retryAfterSeconds = Math.ceil((RATE_LIMIT_WINDOW - (now - entry.start)) / 1000);
+        res.set('Retry-After', String(Math.max(retryAfterSeconds, 1)));
         return res.status(429).json({ error: 'Too many requests. Please try again later.' });
     }
 
