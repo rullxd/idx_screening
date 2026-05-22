@@ -65,3 +65,21 @@ export function getBrokerTierInfo(code?: string): BrokerTierInfo {
     if (!normalizedCode) return UNKNOWN_BROKER_TIER
     return BROKER_TIER_REGISTRY[normalizedCode] || UNKNOWN_BROKER_TIER
 }
+
+/** Compatibility helpers for older utilities expecting these names */
+export function getBrokerInfo(code?: string) {
+    const info = getBrokerTierInfo(code)
+    return {
+        code: info.code,
+        name: info.name,
+        tier: info.tier,
+        tierLabel: info.name,
+        isForeign: info.isForeign,
+        isGovernment: false,
+        description: info.description,
+    }
+}
+
+export function getBrokerTier(code?: string): BrokerTier {
+    return getBrokerTierInfo(code).tier
+}

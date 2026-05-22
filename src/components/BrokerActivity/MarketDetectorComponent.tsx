@@ -52,36 +52,38 @@ export default function MarketDetectorComponent() {
     const insight = analyzeBandarmology(topBuyers, topSellers)
 
     return (
-        <div className="space-y-6">
-            <Card className="p-4">
+        <div className="space-y-5 md:space-y-6">
+            <Card className="p-3 md:p-4">
                 <p className="text-sm text-dark-400 mb-3">
                     Analisis bandar & ringkasan broker buy/sell untuk satu saham.
                 </p>
                 <div className="flex flex-col gap-3">
-                    <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
                         <input
                             type="text"
                             value={inputCode}
                             onChange={(e) => setInputCode(e.target.value.toUpperCase())}
                             onKeyDown={(e) => e.key === 'Enter' && applyStock()}
                             placeholder="Kode saham, mis. BNBR"
-                            className="flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
+                            className="w-full xl:flex-1 px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 placeholder-dark-500 focus:outline-none focus:border-accent-green"
                         />
-                        <button
-                            type="button"
-                            onClick={() => applyStock()}
-                            className="px-6 py-2.5 bg-accent-green text-dark-950 font-semibold rounded-lg hover:bg-opacity-90 transition"
-                        >
-                            Analisis
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => refetch()}
-                            className="px-4 py-2.5 border border-dark-700 rounded-lg text-dark-300 hover:bg-dark-800 transition"
-                        >
-                            ⟳ Refresh
-                        </button>
-                        <DateRangePicker value={dateRange} onChange={setDateRange} />
+                        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                            <button
+                                type="button"
+                                onClick={() => applyStock()}
+                                className="px-6 py-2.5 bg-accent-green text-dark-950 font-semibold rounded-lg hover:bg-opacity-90 transition"
+                            >
+                                Analisis
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => refetch()}
+                                className="px-4 py-2.5 border border-dark-700 rounded-lg text-dark-300 hover:bg-dark-800 transition"
+                            >
+                                ⟳ Refresh
+                            </button>
+                            <DateRangePicker value={dateRange} onChange={setDateRange} />
+                        </div>
                     </div>
                     <p className="text-xs text-dark-500">
                         Tip: gunakan rentang 1 minggu - 3 bulan untuk melihat silent accumulation, jangan hanya today.
@@ -143,7 +145,7 @@ export default function MarketDetectorComponent() {
 
                     <BandarmologyInsightCard insight={insight} />
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                         <BrokerFlowList title="🟢 Top Broker Buyer" items={topBuyers} side="buy" />
                         <BrokerFlowList title="🔴 Top Broker Seller" items={topSellers} side="sell" />
                     </div>
@@ -159,6 +161,13 @@ function BandarmologyInsightCard({
     insight: ReturnType<typeof analyzeBandarmology>
 }) {
     const fakeRetail = [...new Set([...insight.fakeRetailBuyers, ...insight.fakeRetailSellers])]
+    const absorptionTone = insight.absorptionRatio >= 1.1 ? 'bullish' : insight.absorptionRatio <= 0.9 ? 'bearish' : 'neutral'
+    const spreadTone =
+        insight.concentrationSpread >= 0.1
+            ? 'bullish'
+            : insight.concentrationSpread <= -0.1
+                ? 'bearish'
+                : 'neutral'
 
     return (
         <Card className="p-4">
@@ -179,6 +188,42 @@ function BandarmologyInsightCard({
                     label="Crossing Value"
                     value={formatCurrency(insight.crossingValue)}
                     tone={insight.crossingValue > 0 ? 'warning' : 'neutral'}
+                />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+                <SignalStat
+                    label="Net Flow Intensity"
+                    value={`${(insight.netFlowRatio * 100).toFixed(1)}%`}
+                    tone={insight.netFlowRatio >= 0 ? 'bullish' : 'bearish'}
+                />
+                <SignalStat
+                    label="Absorption Ratio"
+                    value={`${insight.absorptionRatio.toFixed(2)}x`}
+                    tone={absorptionTone}
+                />
+                <SignalStat
+                    label="Crossing Share"
+                    value={`${(insight.crossingShare * 100).toFixed(1)}%`}
+                    tone={insight.crossingShare >= 0.25 ? 'warning' : 'neutral'}
+                />
+                <SignalStat
+                    label="Concentration Spread"
+                    value={`${(insight.concentrationSpread * 100).toFixed(1)}%`}
+                    tone={spreadTone}
+                />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                <DerivedMetric
+                    label="Avg Ticket Buyer"
+                    value={formatCurrency(insight.buyAvgTicket)}
+                    subValue={`Freq ${formatBigNumber(insight.buyTotalFreq)} · Lot ${formatBigNumber(insight.buyTotalLot)}`}
+                />
+                <DerivedMetric
+                    label="Avg Ticket Seller"
+                    value={formatCurrency(insight.sellAvgTicket)}
+                    subValue={`Freq ${formatBigNumber(insight.sellTotalFreq)} · Lot ${formatBigNumber(insight.sellTotalLot)}`}
                 />
             </div>
 
@@ -242,6 +287,16 @@ function TierSummary({ label, value, subValue }: { label: string; value: string;
         <div className="rounded-lg bg-dark-800 border border-dark-700 p-2">
             <p className="text-[10px] text-dark-500 uppercase tracking-wide">{label}</p>
             <p className="text-sm font-semibold text-dark-200 mt-1">{value}</p>
+            <p className="text-[10px] text-dark-500 mt-0.5 tabular-nums">{subValue}</p>
+        </div>
+    )
+}
+
+function DerivedMetric({ label, value, subValue }: { label: string; value: string; subValue: string }) {
+    return (
+        <div className="rounded-lg bg-dark-800 border border-dark-700 p-2">
+            <p className="text-[10px] text-dark-500 uppercase tracking-wide">{label}</p>
+            <p className="text-sm font-semibold text-dark-200 mt-1 tabular-nums">{value}</p>
             <p className="text-[10px] text-dark-500 mt-0.5 tabular-nums">{subValue}</p>
         </div>
     )

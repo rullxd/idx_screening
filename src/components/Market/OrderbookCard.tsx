@@ -187,7 +187,7 @@ export default function OrderbookCard({ symbol }: OrderbookCardProps) {
             </div>
 
             <p className="text-[10px] text-dark-500 text-center mt-2 flex-shrink-0">
-                {bids.length} bid · {offers.length} offer · refresh 10s
+                {bids.length} bid · {offers.length} offer · auto-refresh saat halaman dibuka
             </p>
         </Card>
     )

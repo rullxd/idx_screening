@@ -2,7 +2,6 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom' // Impor
 import Layout from '@/components/Layout'
 import DashboardPage from '@/pages/DashboardPage'
 import MarketPage from '@/pages/MarketPage'
-import ScreenerPage from '@/pages/ScreenerPage'
 import BrokerActivityPage from '@/pages/BrokerActivityPage'
 import SignalScannerPage from '@/pages/SignalScannerPage'
 import AlertsPage from '@/pages/AlertsPage'
@@ -11,10 +10,12 @@ import { useMonitorSignificantChanges } from '@/hooks/use-monitor'
 
 export default function App() {
     const location = useLocation()
-    const isSignalsRoute = location.pathname.startsWith('/signals')
+    const shouldPauseGlobalMonitor =
+        location.pathname.startsWith('/signals')
+        || location.pathname.startsWith('/market')
 
     // Jalankan pemantauan perubahan pasar secara global
-    useMonitorSignificantChanges({ paused: isSignalsRoute })
+    useMonitorSignificantChanges({ paused: shouldPauseGlobalMonitor })
 
     return (
         <Layout>
@@ -22,7 +23,7 @@ export default function App() {
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/market" element={<MarketPage />} />
-                <Route path="/screener" element={<ScreenerPage />} />
+                <Route path="/screener" element={<Navigate to="/broker-activity" replace />} />
                 <Route path="/broker-activity" element={<BrokerActivityPage />} />
                 <Route path="/signals" element={<SignalScannerPage />} />
                 <Route path="/alerts" element={<AlertsPage />} />

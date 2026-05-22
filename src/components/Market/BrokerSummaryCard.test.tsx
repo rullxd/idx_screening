@@ -50,12 +50,25 @@ describe('BrokerSummaryCard', () => {
         expect(screen.getByText('Top Sellers')).toBeInTheDocument()
         expect(screen.getByText('Buyer')).toBeInTheDocument()
         expect(screen.getByText('Seller')).toBeInTheDocument()
-        expect(screen.getByText('Net')).toBeInTheDocument()
+        expect(screen.getByText('Net Avg')).toBeInTheDocument()
         expect(screen.getByText('22')).toBeInTheDocument()
         expect(screen.getByText('17')).toBeInTheDocument()
         expect(screen.getByText('YP')).toBeInTheDocument()
         expect(screen.getByText('PD')).toBeInTheDocument()
-        expect(screen.getByText('2 buyer · 1 seller · refresh 60s')).toBeInTheDocument()
-        expect(screen.getByText('↻')).toBeInTheDocument()
+        expect(screen.getByText('2 buyer · 1 seller · fokus ke nilai NET dan konsentrasi lot')).toBeInTheDocument()
+        expect(screen.getByText('Memperbarui...')).toBeInTheDocument()
+    })
+
+    it('passes custom date range to market detector query options', () => {
+        mockUseMarketDetector.mockReturnValue(createQueryState({ data: createBrokerDetectorData() }))
+
+        render(<BrokerSummaryCard symbol="BBRI" fromDate="2026-05-01" toDate="2026-05-07" />)
+
+        expect(mockUseMarketDetector).toHaveBeenCalledWith('BBRI', {
+            enabled: true,
+            fromDate: '2026-05-01',
+            toDate: '2026-05-07',
+        })
+        expect(screen.getByText('2026-05-01 - 2026-05-07')).toBeInTheDocument()
     })
 })

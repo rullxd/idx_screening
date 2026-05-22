@@ -32,3 +32,15 @@ export default function BrokerTierBadge({ brokerCode, className }: BrokerTierBad
         </span>
     )
 }
+
+export function BrokerTierInline({ code, className }: { code?: string; className?: string }) {
+    const tierInfo = getBrokerTierInfo(code)
+    const icon = tierInfo.tier === 3 ? '🦈' : tierInfo.tier === 2 ? '🐳' : '🐜'
+
+    return (
+        <span className={clsx('inline-flex items-center gap-1 text-xs font-semibold', className)}>
+            <span className="text-[12px] leading-none">{icon}</span>
+            <span className="text-[11px] opacity-80">{tierInfo.name}</span>
+        </span>
+    )
+}

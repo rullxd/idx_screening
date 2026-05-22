@@ -16,6 +16,92 @@ import {
 
 // ============= BROKER ENDPOINTS =============
 
+type BrokerRankingGroup = Broker['group']
+
+interface RawBrokerRankingRow {
+    code?: unknown
+    broker_code?: unknown
+    name?: unknown
+    broker_name?: unknown
+    net_value?: unknown
+    net?: unknown
+    buy_value?: unknown
+    buy?: unknown
+    bval?: unknown
+    sell_value?: unknown
+    sell?: unknown
+    sval?: unknown
+    total_value?: unknown
+    value?: unknown
+    tval?: unknown
+    total_volume?: unknown
+    volume?: unknown
+    tlot?: unknown
+    lot?: unknown
+    group?: unknown
+    type?: unknown
+    broker_group?: unknown
+}
+
+function toSafeNumber(value: unknown): number {
+    const parsed = typeof value === 'string' ? Number.parseFloat(value) : Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+}
+
+function normalizeBrokerGroup(input: unknown): BrokerRankingGroup {
+    const value = String(input || '').toUpperCase()
+    if (value.includes('FOREIGN') || value === 'ASING') return 'BROKER_GROUP_FOREIGN'
+    if (value.includes('GOV') || value.includes('PEMERINTAH')) return 'BROKER_GROUP_GOVERNMENT'
+    return 'BROKER_GROUP_LOCAL'
+}
+
+function extractBrokerRows(payload: unknown): RawBrokerRankingRow[] {
+    if (Array.isArray(payload)) return payload as RawBrokerRankingRow[]
+    if (!payload || typeof payload !== 'object') return []
+
+    const root = payload as Record<string, unknown>
+    const candidates: unknown[] = [
+        root.data,
+        root.list,
+        (root.data as Record<string, unknown> | undefined)?.list,
+        (root.data as Record<string, unknown> | undefined)?.data,
+    ]
+
+    for (const candidate of candidates) {
+        if (Array.isArray(candidate)) {
+            return candidate as RawBrokerRankingRow[]
+        }
+    }
+
+    return []
+}
+
+function normalizeBrokerRows(payload: unknown): Broker[] {
+    const rows = extractBrokerRows(payload)
+
+    return rows
+        .map((row) => {
+            const code = String(row.code ?? row.broker_code ?? '').trim().toUpperCase()
+            if (!code) return null
+
+            const buyValue = toSafeNumber(row.buy_value ?? row.buy ?? row.bval)
+            const sellValue = toSafeNumber(row.sell_value ?? row.sell ?? row.sval)
+            const netValue = toSafeNumber(row.net_value ?? row.net ?? buyValue - sellValue)
+
+            return {
+                code,
+                name: String(row.name ?? row.broker_name ?? code),
+                net_value: netValue,
+                buy_value: buyValue,
+                sell_value: sellValue,
+                total_value: toSafeNumber(row.total_value ?? row.value ?? row.tval ?? buyValue + sellValue),
+                total_volume: toSafeNumber(row.total_volume ?? row.volume ?? row.tlot ?? row.lot),
+                group: normalizeBrokerGroup(row.group ?? row.type ?? row.broker_group),
+            } satisfies Broker
+        })
+        .filter((row): row is Broker => row !== null)
+}
+
 export async function fetchBrokerRanking(
     params?: {
         sort?: string
@@ -33,8 +119,7 @@ export async function fetchBrokerRanking(
             cancelKey: 'broker-ranking',
         }
     )
-    // API returns { data: Broker[] } structure
-    return response.data || []
+    return normalizeBrokerRows(response)
 }
 
 export async function fetchBrokerActivity(params?: {

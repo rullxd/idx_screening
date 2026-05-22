@@ -6,6 +6,8 @@ import clsx from 'clsx'
 
 interface BrokerSummaryCardProps {
     symbol: string
+    fromDate?: string
+    toDate?: string
 }
 
 function formatScientificNotation(value: string): number {
@@ -98,9 +100,11 @@ function BrokerTable({
     )
 }
 
-export default function BrokerSummaryCard({ symbol }: BrokerSummaryCardProps) {
+export default function BrokerSummaryCard({ symbol, fromDate, toDate }: BrokerSummaryCardProps) {
     const { data, isLoading, error, refetch, isFetching } = useMarketDetector(symbol, {
         enabled: !!symbol,
+        fromDate,
+        toDate,
     })
 
     const brokerData = useMemo(() => {
@@ -139,45 +143,53 @@ export default function BrokerSummaryCard({ symbol }: BrokerSummaryCardProps) {
     const brokersSell = brokerData?.brokers_sell || []
 
     return (
-        <Card className="p-4 flex flex-col h-[520px]">
-            <div className="flex-shrink-0 mb-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-dark-100">Broker Summary</h3>
-                        <span className="text-xs text-dark-400">{symbol}</span>
-                    </div>
-                    {isFetching && (
-                        <span className="text-[10px] text-dark-500 animate-pulse">↻</span>
-                    )}
-                </div>
-
-                {bandarData && (
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
-                        <div className="bg-dark-800 rounded px-2 py-1">
-                            <span className="text-dark-500">Buyer </span>
-                            <span className="font-medium text-accent-green">{bandarData.total_buyer}</span>
-                        </div>
-                        <div className="bg-dark-800 rounded px-2 py-1">
-                            <span className="text-dark-500">Seller </span>
-                            <span className="font-medium text-accent-red">{bandarData.total_seller}</span>
-                        </div>
-                        <div className="bg-dark-800 rounded px-2 py-1">
-                            <span className="text-dark-500">Net </span>
-                            <span className={clsx('font-medium', bandarData.avg.amount >= 0 ? 'text-accent-green' : 'text-accent-red')}>
-                                {formatCurrency(bandarData.avg.amount)}
+        <Card className="p-4 flex flex-col gap-3 h-[560px]">
+            <div className="flex-shrink-0">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-dark-100">Broker Summary</h3>
+                            <span className="text-xs rounded-full border border-dark-700 bg-dark-800 px-2 py-0.5 text-dark-300">
+                                {symbol}
                             </span>
                         </div>
+                        {(fromDate || toDate) && (
+                            <p className="text-[11px] text-dark-500 mt-1">
+                                {fromDate || '-'}{toDate && toDate !== fromDate ? ` - ${toDate}` : ''}
+                            </p>
+                        )}
                     </div>
-                )}
+
+                    {isFetching && <span className="text-[10px] text-dark-500 animate-pulse">Memperbarui...</span>}
+                </div>
             </div>
 
-            <div className="flex-1 min-h-0 grid grid-cols-2 gap-2 border border-dark-700 rounded-lg overflow-hidden">
+            {bandarData && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px]">
+                    <div className="rounded-lg border border-dark-700 bg-dark-800/70 px-2.5 py-2">
+                        <p className="text-dark-500 uppercase tracking-wide">Buyer</p>
+                        <p className="font-semibold text-accent-green text-sm mt-0.5">{bandarData.total_buyer}</p>
+                    </div>
+                    <div className="rounded-lg border border-dark-700 bg-dark-800/70 px-2.5 py-2">
+                        <p className="text-dark-500 uppercase tracking-wide">Seller</p>
+                        <p className="font-semibold text-accent-red text-sm mt-0.5">{bandarData.total_seller}</p>
+                    </div>
+                    <div className="rounded-lg border border-dark-700 bg-dark-800/70 px-2.5 py-2">
+                        <p className="text-dark-500 uppercase tracking-wide">Net Avg</p>
+                        <p className={clsx('font-semibold text-sm mt-0.5', bandarData.avg.amount >= 0 ? 'text-accent-green' : 'text-accent-red')}>
+                            {formatCurrency(bandarData.avg.amount)}
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-2 border border-dark-700 rounded-lg overflow-hidden">
                 <BrokerTable title="Top Buyers" brokers={brokersBuy.slice(0, 10)} isBuy={true} />
                 <BrokerTable title="Top Sellers" brokers={brokersSell.slice(0, 10)} isBuy={false} />
             </div>
 
-            <p className="text-[10px] text-dark-500 text-center mt-2 flex-shrink-0">
-                {brokersBuy.length} buyer · {brokersSell.length} seller · refresh 60s
+            <p className="text-[10px] text-dark-500 text-center flex-shrink-0">
+                {brokersBuy.length} buyer · {brokersSell.length} seller · fokus ke nilai NET dan konsentrasi lot
             </p>
         </Card>
     )

@@ -1,7 +1,17 @@
-import { useState } from 'react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
-import { useStockChart, useOrderbook } from '@/hooks/use-queries'
-import { Card, LoadingSpinner, ErrorState } from '@/components'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+    CandlestickSeries,
+    createChart,
+    CrosshairMode,
+    LineSeries,
+    LineStyle,
+    type IChartApi,
+    type IPriceLine,
+    type ISeriesApi,
+    type UTCTimestamp,
+} from 'lightweight-charts'
+import { useStockChart } from '@/hooks/use-queries'
+import { Card, ErrorState, LoadingSpinner } from '@/components'
 
 const TIMEFRAMES = [
     { value: '1d', label: '1D' },
@@ -16,6 +26,28 @@ const TIMEFRAMES = [
 
 interface StockChartComponentProps {
     symbol: string
+}
+
+type ChartMode = 'line' | 'candlestick'
+
+type LegacySeriesChartApi = IChartApi & {
+    addLineSeries?: (options?: Record<string, unknown>) => ISeriesApi<'Line'>
+}
+
+type ParsedChartPoint = {
+    time: string
+    chartTime: UTCTimestamp
+    price: number
+    open: number | null
+    high: number
+    low: number
+    close: number | null
+}
+
+function toNumber(value: unknown): number | null {
+    if (value == null || value === '') return null
+    const n = Number(value)
+    return Number.isFinite(n) ? n : null
 }
 
 /** API: `change` is absolute delta (number); `previous_timeframe_price` is often an object. */
@@ -45,10 +77,20 @@ function stockIconUrl(symbol: string, fromApi?: string): string {
     return fromApi || `https://assets.stockbit.com/logos/companies/${symbol.toUpperCase()}.png`
 }
 
+function toChartTimestamp(dateStr: string, idx: number): UTCTimestamp {
+    const parsed = new Date(dateStr)
+    if (!isNaN(parsed.getTime())) {
+        return Math.floor(parsed.getTime() / 1000) as UTCTimestamp
+    }
+
+    const fallbackEpoch = Date.UTC(2000, 0, 1) + idx * 60_000
+    return Math.floor(fallbackEpoch / 1000) as UTCTimestamp
+}
+
 export default function StockChartComponent({ symbol }: StockChartComponentProps) {
     const [selectedTimeframe, setSelectedTimeframe] = useState('1d')
+    const [chartMode, setChartMode] = useState<ChartMode>('line')
     const { data, isLoading, error, refetch } = useStockChart(symbol, selectedTimeframe)
-    const { data: orderbookData } = useOrderbook(symbol)
 
     if (isLoading) return <LoadingSpinner />
     if (error) {
@@ -64,16 +106,22 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
     const rawData = Array.isArray(data?.prices)
         ? data.prices
         : Array.isArray(data)
-          ? data
-          : Array.isArray(data?.data?.prices)
-            ? data.data.prices
-            : Array.isArray(data?.data)
-              ? data.data
-              : []
+            ? data
+            : Array.isArray(data?.data?.prices)
+                ? data.data.prices
+                : Array.isArray(data?.data)
+                    ? data.data
+                    : []
 
-    const chartData = rawData
+    const chartData: ParsedChartPoint[] = rawData
         .map((item: any, idx: number) => {
-            const price = parseFloat(item.value || item.close || item.price || '0') || 0
+            const closeFromOhlc = toNumber(item.close)
+            const valueLike = toNumber(item.value) ?? toNumber(item.price)
+            const price = closeFromOhlc ?? valueLike ?? 0
+            const open = toNumber(item.open)
+            const high = toNumber(item.high)
+            const low = toNumber(item.low)
+            const close = closeFromOhlc
             const dateStr = item.formatted_date || item.date || ''
 
             let time = ''
@@ -87,19 +135,43 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
                                 : date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })
                     }
                 } catch {
-                    // ignore
+                    // ignore parse failures
                 }
             }
 
             time = time || item.xlabel || `${idx}`
 
-            return { time, price }
-        })
-        .filter((d: { time: string; price: number }) => d.price >= 0)
+            const previousPrice =
+                idx > 0
+                    ? parseFloat(rawData[idx - 1]?.value || rawData[idx - 1]?.close || rawData[idx - 1]?.price || '0') || 0
+                    : price
 
-    const prices = chartData.map((d: { time: string; price: number }) => d.price)
-    const high = prices.length ? Math.max(...prices) : 0
-    const low = prices.length ? Math.min(...prices) : 0
+            const wickHigh = high ?? Math.max(open ?? price, close ?? price, price)
+            const wickLow = low ?? Math.min(open ?? price, close ?? price, price)
+            const fallbackOpen = open ?? previousPrice
+            const fallbackClose = close ?? price
+
+            return {
+                time,
+                chartTime: toChartTimestamp(String(dateStr), idx),
+                price,
+                open: open ?? fallbackOpen,
+                high: Math.max(wickHigh, fallbackOpen, fallbackClose),
+                low: Math.min(wickLow, fallbackOpen, fallbackClose),
+                close: close ?? fallbackClose,
+            }
+        })
+        .filter((d: ParsedChartPoint) => d.price >= 0)
+
+    const hasOhlcData = chartData.some(
+        (d: ParsedChartPoint) => d.open != null && d.close != null && Number.isFinite(d.high) && Number.isFinite(d.low)
+    )
+
+    const prices = chartData.map((d: ParsedChartPoint) => d.price)
+    const highs = chartData.map((d: ParsedChartPoint) => d.high)
+    const lows = chartData.map((d: ParsedChartPoint) => d.low)
+    const high = highs.length ? Math.max(...highs) : 0
+    const low = lows.length ? Math.min(...lows) : 0
     const avg = prices.length ? prices.reduce((a: number, b: number) => a + b, 0) / prices.length : 0
     const volatility = high - low
     const first = prices[0] ?? 0
@@ -110,87 +182,8 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
     const changePct = data?.percentage != null ? parseFloat(String(data.percentage)) : null
     const displayPrice = resolveDisplayPrice(data, last)
 
-    const ob = orderbookData?.data || orderbookData || {}
-    const iconUrl = stockIconUrl(symbol, ob.icon_url)
-    const companyName = ob.name as string | undefined
-
-    // --- Custom Tooltip & Cursor for Chart ---
-    // Custom Tooltip Component - menampilkan harga & perubahan
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            const currentPrice = payload[0].value
-            const change = currentPrice - first
-            const changePercent = first !== 0 ? (change / first) * 100 : 0
-            const isPositive = change >= 0
-
-            return (
-                <div className="bg-dark-900/95 border border-dark-700 px-3 py-2 rounded-lg shadow-2xl backdrop-blur-sm">
-                    {/* Tampilkan label (waktu/tanggal) di sini */}
-                    <p className="text-dark-300 text-xs mb-1 font-medium">{label}</p>
-                    <div className="flex flex-col">
-                        <span className="text-dark-100 font-bold text-base leading-none">
-                            {currentPrice.toLocaleString('id-ID', { minimumFractionDigits: 2 })}
-                        </span>
-                        <span className={`text-xs font-semibold mt-1 ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
-                            {isPositive ? '▲' : '▼'} {Math.abs(change).toFixed(2)} ({isPositive ? '+' : ''}{changePercent.toFixed(2)}%)
-                        </span>
-                    </div>
-                </div>
-            )
-        }
-        return null
-    }
-
-    // Custom Cursor - garis vertikal + label jam di sumbu X bawah
-    const CustomChartCursor = (props: any) => {
-        const { points, payload, top, height } = props
-        if (!points || points.length === 0) return null
-
-        const x = points[0].x
-        const y = top || 0
-        const chartBottom = y + (height || 300) // Ensure height is available or default
-        const timeLabel = payload?.[0]?.payload?.time || ''
-
-        return (
-            <g>
-                {/* Garis vertikal putus-putus dari titik data sampai bawah */}
-                <line
-                    x1={x}
-                    y1={y}
-                    x2={x}
-                    y2={chartBottom}
-                    stroke="#6b7280"
-                    strokeWidth={1}
-                    strokeDasharray="3 3"
-                />
-                {/* Label jam di bagian bawah garis */}
-                <g transform={`translate(${x}, ${chartBottom + 4})`}>
-                    <rect
-                        x={-28}
-                        y={0}
-                        width={56}
-                        height={18}
-                        rx={4}
-                        ry={4}
-                        fill="#1e293b"
-                        stroke="#374151"
-                        strokeWidth={0.5}
-                    />
-                    <text
-                        x={0}
-                        y={13}
-                        textAnchor="middle"
-                        fill="#e5e7eb"
-                        fontSize={10}
-                        fontWeight={600}
-                    >
-                        {timeLabel}
-                    </text>
-                </g>
-            </g>
-        )
-    }
-    // --- End Custom Tooltip & Cursor ---
+    const iconUrl = stockIconUrl(symbol)
+    const companyName = undefined
 
     if (!chartData.length) {
         return (
@@ -213,14 +206,12 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
                     changePct={changePct}
                 />
                 <div className={`text-right font-semibold ${trendColor}`}>
-                    {trend === 'naik' ? '📈' : trend === 'turun' ? '📉' : '➡️'} {trend.toUpperCase()}
+                    {trend === 'naik' ? 'UP' : trend === 'turun' ? 'DOWN' : 'FLAT'} {trend.toUpperCase()}
                 </div>
             </div>
 
-            <TimeframeButtons
-                selectedTimeframe={selectedTimeframe}
-                onSelect={setSelectedTimeframe}
-            />
+            <TimeframeButtons selectedTimeframe={selectedTimeframe} onSelect={setSelectedTimeframe} />
+            <ChartModeButtons selectedMode={chartMode} onSelect={setChartMode} />
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs mb-4">
                 <Stat label="HIGH" value={high.toFixed(2)} />
@@ -234,47 +225,194 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
                 />
             </div>
 
-            <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={chartData}>
-                    <defs>
-                        <linearGradient id={`stockGradient-${symbol}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={gradientColor} stopOpacity={0.3} />
-                            <stop offset="95%" stopColor={gradientColor} stopOpacity={0} />
-                        </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                    <XAxis
-                        dataKey="time"
-                        stroke="#6b7280"
-                        style={{ fontSize: '11px' }}
-                        interval="preserveStartEnd"
-                        minTickGap={80} // Memaksa jarak antar label jam agar tidak terlalu padat
-                    />
-                    <YAxis
-                        stroke="#6b7280"
-                        style={{ fontSize: '11px' }}
-                        domain={['dataMin - 50', 'dataMax + 50']}
-                        width={60}
-                    />
-                    <ReferenceLine y={high} stroke="#10b981" strokeDasharray="5 5" opacity={0.15} strokeWidth={1} />
-                    <ReferenceLine y={low} stroke="#ef4444" strokeDasharray="5 5" opacity={0.15} strokeWidth={1} />
-                    <ReferenceLine y={avg} stroke="#f59e0b" strokeDasharray="5 5" opacity={0.15} strokeWidth={1} />
-                    <Tooltip
-                        content={<CustomTooltip />}
-                        cursor={<CustomChartCursor />}
-                    />
-                    <Area
-                        type="monotone"
-                        dataKey="price"
-                        stroke={gradientColor}
-                        strokeWidth={2}
-                        fill={`url(#stockGradient-${symbol})`}
-                        dot={false}
-                        isAnimationActive
-                    />
-                </AreaChart>
-            </ResponsiveContainer>
+            <LightweightChartPanel
+                symbol={symbol}
+                chartMode={chartMode}
+                chartData={chartData}
+                gradientColor={gradientColor}
+                useCandles={hasOhlcData && chartMode === 'candlestick'}
+                high={high}
+                low={low}
+                avg={avg}
+            />
         </Card>
+    )
+}
+
+function LightweightChartPanel({
+    symbol,
+    chartMode,
+    chartData,
+    gradientColor,
+    useCandles,
+    high,
+    low,
+    avg,
+}: {
+    symbol: string
+    chartMode: ChartMode
+    chartData: ParsedChartPoint[]
+    gradientColor: string
+    useCandles: boolean
+    high: number
+    low: number
+    avg: number
+}) {
+    const containerRef = useRef<HTMLDivElement | null>(null)
+    const chartRef = useRef<IChartApi | null>(null)
+    const seriesRef = useRef<ISeriesApi<'Line'> | ISeriesApi<'Candlestick'> | null>(null)
+    const markerLinesRef = useRef<IPriceLine[]>([])
+
+    const lineData = useMemo(() => chartData.map((d) => ({ time: d.chartTime, value: d.price })), [chartData])
+    const candleData = useMemo(
+        () =>
+            chartData.map((d) => ({
+                time: d.chartTime,
+                open: d.open ?? d.price,
+                high: d.high,
+                low: d.low,
+                close: d.close ?? d.price,
+            })),
+        [chartData]
+    )
+
+    useEffect(() => {
+        const container = containerRef.current
+        if (!container) return
+
+        const chart = createChart(container, {
+            width: container.clientWidth || 900,
+            height: 400,
+            layout: {
+                background: { color: '#020617' },
+                textColor: '#94a3b8',
+            },
+            grid: {
+                vertLines: { color: '#1f2937' },
+                horzLines: { color: '#1f2937' },
+            },
+            rightPriceScale: {
+                visible: true,
+                borderColor: '#334155',
+                autoScale: true,
+                scaleMargins: { top: 0.08, bottom: 0.08 },
+            },
+            timeScale: {
+                borderColor: '#334155',
+                rightOffset: 4,
+                timeVisible: true,
+                secondsVisible: false,
+            },
+            crosshair: {
+                mode: CrosshairMode.Normal,
+                vertLine: {
+                    color: '#64748b',
+                    style: LineStyle.Dashed,
+                    width: 1,
+                    labelBackgroundColor: '#0f172a',
+                },
+                horzLine: {
+                    color: '#475569',
+                    style: LineStyle.Dashed,
+                    width: 1,
+                    labelBackgroundColor: '#0f172a',
+                },
+            },
+            handleScroll: {
+                mouseWheel: true,
+                pressedMouseMove: true,
+                horzTouchDrag: true,
+                vertTouchDrag: false,
+            },
+            handleScale: {
+                mouseWheel: true,
+                pinch: true,
+                axisPressedMouseMove: true,
+            },
+            localization: {
+                locale: 'id-ID',
+            },
+        })
+
+        chartRef.current = chart
+
+        return () => {
+            chart.remove()
+            chartRef.current = null
+            seriesRef.current = null
+            markerLinesRef.current = []
+        }
+    }, [])
+
+    useEffect(() => {
+        const chart = chartRef.current
+        if (!chart) return
+
+        if (seriesRef.current) {
+            chart.removeSeries(seriesRef.current)
+            seriesRef.current = null
+            markerLinesRef.current = []
+        }
+
+        const legacyChart = chart as LegacySeriesChartApi
+
+        const series = useCandles
+            ? chart.addSeries(CandlestickSeries, {
+                upColor: '#10b981',
+                downColor: '#ef4444',
+                borderUpColor: '#10b981',
+                borderDownColor: '#ef4444',
+                wickUpColor: '#10b981',
+                wickDownColor: '#ef4444',
+                priceLineVisible: true,
+                lastValueVisible: true,
+            })
+            : typeof legacyChart.addLineSeries === 'function'
+                ? legacyChart.addLineSeries({
+                    color: gradientColor,
+                    lineWidth: 2,
+                    priceLineVisible: true,
+                    crosshairMarkerVisible: true,
+                    lastValueVisible: true,
+                })
+                : chart.addSeries(LineSeries, {
+                    color: gradientColor,
+                    lineWidth: 2,
+                    priceLineVisible: true,
+                    crosshairMarkerVisible: true,
+                    lastValueVisible: true,
+                })
+
+        if (useCandles) {
+            series.setData(candleData)
+        } else {
+            series.setData(lineData)
+        }
+
+        const createMarker = (price: number, color: string) =>
+            series.createPriceLine({
+                price,
+                color,
+                lineWidth: 1,
+                lineStyle: LineStyle.Dashed,
+                axisLabelVisible: false,
+                title: '',
+            })
+
+        markerLinesRef.current = [createMarker(high, '#10b981'), createMarker(low, '#ef4444'), createMarker(avg, '#f59e0b')]
+
+        seriesRef.current = series
+        chart.timeScale().fitContent()
+    }, [useCandles, lineData, candleData, gradientColor, high, low, avg])
+
+    return (
+        <div
+            ref={containerRef}
+            data-testid="stock-chart-canvas"
+            data-symbol={symbol}
+            data-mode={chartMode}
+            className="h-[400px] w-full rounded-lg border border-dark-800 bg-dark-950/40"
+        />
     )
 }
 
@@ -306,18 +444,12 @@ function ChartHeaderLeft({
 }) {
     return (
         <div className="flex items-start gap-3 min-w-0">
-            <img
-                src={iconUrl}
-                alt=""
-                className="w-10 h-10 rounded-full bg-dark-800 flex-shrink-0 object-cover"
-            />
+            <img src={iconUrl} alt="" className="w-10 h-10 rounded-full bg-dark-800 flex-shrink-0 object-cover" />
             <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-dark-100">{symbol}</h3>
-                {companyName && (
-                    <p className="text-xs text-dark-400 truncate">{companyName}</p>
-                )}
+                {companyName && <p className="text-xs text-dark-400 truncate">{companyName}</p>}
                 <p className="text-xs text-dark-500 mt-1">
-                    Timeframe: {selectedTimeframe.toUpperCase()} • {chartDataLength} titik data
+                    Timeframe: {selectedTimeframe.toUpperCase()} | {chartDataLength} titik data
                 </p>
                 {price != null && !isNaN(price) && (
                     <p className="text-sm text-dark-300 mt-1">
@@ -356,6 +488,37 @@ function TimeframeButtons({
                     }`}
                 >
                     {tf.label}
+                </button>
+            ))}
+        </div>
+    )
+}
+
+function ChartModeButtons({
+    selectedMode,
+    onSelect,
+}: {
+    selectedMode: ChartMode
+    onSelect: (value: ChartMode) => void
+}) {
+    const modes: Array<{ value: ChartMode; label: string }> = [
+        { value: 'line', label: 'Line' },
+        { value: 'candlestick', label: 'Candlestick' },
+    ]
+
+    return (
+        <div className="mb-4 flex flex-wrap gap-2">
+            {modes.map((mode) => (
+                <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => onSelect(mode.value)}
+                    aria-pressed={selectedMode === mode.value}
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
+                        selectedMode === mode.value ? 'bg-accent-blue text-white' : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                    }`}
+                >
+                    {mode.label}
                 </button>
             ))}
         </div>

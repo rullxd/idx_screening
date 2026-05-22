@@ -150,15 +150,17 @@ export function useOrderbook(
     return useQuery({
         queryKey: ['orderbook', symbol],
         queryFn: async () => fetchOrderbook(symbol),
-        staleTime: 3 * 1000,
+        staleTime: 10 * 1000,
         gcTime: 10 * 1000,
-        retry: 2,
+        retry: shouldRetryQuery,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         enabled: options?.enabled !== false && !!symbol,
-        // Jika refetchInterval di-pass (termasuk false), gunakan itu; default 10s
-        refetchInterval: options && 'refetchInterval' in options
-            ? options.refetchInterval
-            : 10 * 1000,
+        // Default tanpa polling; bisa di-override per pemanggil jika diperlukan.
+        refetchInterval: options?.refetchInterval,
+        refetchIntervalInBackground: false,
     })
 }
 
@@ -177,8 +179,11 @@ export function useStockChart(
         },
         staleTime: 5 * 1000,
         gcTime: 10 * 1000,
-        retry: 2,
+        retry: shouldRetryQuery,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         enabled: options?.enabled !== false && !!symbol,
         refetchInterval: options?.refetchInterval,
     })
@@ -200,8 +205,11 @@ export function useTrendingStocks(
         },
         staleTime: 3 * 60 * 1000, // 3 minutes
         gcTime: 10 * 60 * 1000,
-        retry: 2,
+        retry: shouldRetryQuery,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
         enabled: options?.enabled !== false,
         refetchInterval: options?.refetchInterval,
     })
@@ -242,10 +250,11 @@ export function useMarketDetector(
         gcTime: 5 * 60 * 1000,
         retry: shouldRetryQuery,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnMount: 'always',
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         enabled: options?.enabled !== false && !!stockCode,
-        refetchInterval: options?.refetchInterval || 2 * 60 * 1000, // Refresh every 2 minutes
+        refetchInterval: options?.refetchInterval,
         refetchIntervalInBackground: false,
     })
 }

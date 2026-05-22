@@ -114,11 +114,23 @@ export interface BandarmologySignal {
 
 export interface BandarmologyInsight {
     netFlow: number
+    netFlowRatio: number
+    buyTotalValue: number
+    sellTotalValue: number
+    buyTotalLot: number
+    sellTotalLot: number
+    buyTotalFreq: number
+    sellTotalFreq: number
+    buyAvgTicket: number
+    sellAvgTicket: number
     buyRetailShare: number
     sellRetailShare: number
+    absorptionRatio: number
     buyerConcentration: number
     sellerConcentration: number
+    concentrationSpread: number
     crossingValue: number
+    crossingShare: number
     fakeRetailBuyers: string[]
     fakeRetailSellers: string[]
     dominantBuyerTier: 'Retail' | 'Whale' | 'Bandar' | 'Mixed'
@@ -185,6 +197,19 @@ export function parseMarketDetector(raw: any): ParsedMarketDetector {
 
 function sumValue(items: MarketDetectorBroker[]): number {
     return items.reduce((sum, item) => sum + item.value, 0)
+}
+
+function sumLot(items: MarketDetectorBroker[]): number {
+    return items.reduce((sum, item) => sum + item.lot, 0)
+}
+
+function sumFreq(items: MarketDetectorBroker[]): number {
+    return items.reduce((sum, item) => sum + item.freq, 0)
+}
+
+function safeDiv(numerator: number, denominator: number): number {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0
+    return numerator / denominator
 }
 
 function calculateTierShare(items: MarketDetectorBroker[], tier: 1 | 2 | 3): number {
@@ -261,13 +286,23 @@ export function analyzeBandarmology(
 ): BandarmologyInsight {
     const buyTotal = sumValue(buyers)
     const sellTotal = sumValue(sellers)
+    const buyTotalLot = sumLot(buyers)
+    const sellTotalLot = sumLot(sellers)
+    const buyTotalFreq = sumFreq(buyers)
+    const sellTotalFreq = sumFreq(sellers)
     const netFlow = buyTotal - sellTotal
+    const grossValue = buyTotal + sellTotal
+    const netFlowRatio = safeDiv(netFlow, grossValue)
+    const buyAvgTicket = safeDiv(buyTotal, buyTotalFreq)
+    const sellAvgTicket = safeDiv(sellTotal, sellTotalFreq)
     const buyRetailShare = calculateTierShare(buyers, 1)
     const sellRetailShare = calculateTierShare(sellers, 1)
+    const absorptionRatio = safeDiv(buyTotal, sellTotal)
     const buyerConcentration = calculateConcentration(buyers, 3)
     const sellerConcentration = calculateConcentration(sellers, 3)
+    const concentrationSpread = buyerConcentration - sellerConcentration
     const crossing = crossingValue(buyers, sellers)
-    const crossingShare = buyTotal > 0 ? crossing / buyTotal : 0
+    const crossingShare = safeDiv(crossing, buyTotal)
     const fakeRetailBuyers = findFakeRetail(buyers)
     const fakeRetailSellers = findFakeRetail(sellers)
     const dominantBuyerTier = dominantTier(buyers)
@@ -327,11 +362,23 @@ export function analyzeBandarmology(
 
     return {
         netFlow,
+        netFlowRatio,
+        buyTotalValue: buyTotal,
+        sellTotalValue: sellTotal,
+        buyTotalLot,
+        sellTotalLot,
+        buyTotalFreq,
+        sellTotalFreq,
+        buyAvgTicket,
+        sellAvgTicket,
         buyRetailShare,
         sellRetailShare,
+        absorptionRatio,
         buyerConcentration,
         sellerConcentration,
+        concentrationSpread,
         crossingValue: crossing,
+        crossingShare,
         fakeRetailBuyers,
         fakeRetailSellers,
         dominantBuyerTier,

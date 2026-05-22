@@ -49,7 +49,7 @@ describe('OrderbookCard', () => {
         expect(screen.getByText('Bid')).toBeInTheDocument()
         expect(screen.getByText('Offer')).toBeInTheDocument()
         expect(screen.getByText('+1.23%')).toBeInTheDocument()
-        expect(screen.getByText('2 bid · 1 offer · refresh 10s')).toBeInTheDocument()
+        expect(screen.getByText('2 bid · 1 offer · auto-refresh saat halaman dibuka')).toBeInTheDocument()
         expect(screen.getByText('↻')).toBeInTheDocument()
         expect(screen.getAllByText('1.250')).toHaveLength(2)
     })

@@ -1,46 +1,68 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import StockChartComponent from './StockChartComponent'
-import { createNormalizedStockChartData, createQueryState } from '@/test/market-factories'
+import { createQueryState } from '@/test/market-factories'
+import { CandlestickSeries, createChart } from 'lightweight-charts'
 
-const mockUseNormalizedStockChart = vi.fn()
-const mockUseOrderbook = vi.fn()
+const mockUseStockChart = vi.fn()
+const mockAddLineSeries = vi.fn()
+const mockAddSeries = vi.fn()
+const mockRemoveSeries = vi.fn()
+const mockFitContent = vi.fn()
+const mockChartRemove = vi.fn()
 
-vi.mock('@/hooks/use-normalized-chart', () => ({
-    useNormalizedStockChart: (...args: unknown[]) => mockUseNormalizedStockChart(...args),
-}))
+const mockLineSeriesApi = {
+    setData: vi.fn(),
+    createPriceLine: vi.fn(() => ({})),
+}
+
+const mockCandleSeriesApi = {
+    setData: vi.fn(),
+    createPriceLine: vi.fn(() => ({})),
+}
 
 vi.mock('@/hooks/use-queries', () => ({
-    useOrderbook: (...args: unknown[]) => mockUseOrderbook(...args),
+    useStockChart: (...args: unknown[]) => mockUseStockChart(...args),
 }))
 
-// Keep chart rendering lightweight for jsdom while preserving component behavior around state/timeframe.
-vi.mock('recharts', () => ({
-    AreaChart: ({ children }: { children: React.ReactNode }) => <svg>{children}</svg>,
-    Area: () => <div data-testid="mock-area" />,
-    XAxis: () => null,
-    YAxis: () => null,
-    CartesianGrid: () => null,
-    Tooltip: () => null,
-    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    ReferenceLine: () => null,
+vi.mock('lightweight-charts', () => ({
+    createChart: vi.fn(() => ({
+        addLineSeries: mockAddLineSeries,
+        addSeries: mockAddSeries,
+        removeSeries: mockRemoveSeries,
+        timeScale: () => ({ fitContent: mockFitContent }),
+        remove: mockChartRemove,
+    })),
+    LineSeries: { seriesType: 'Line' },
+    CandlestickSeries: { seriesType: 'Candlestick' },
+    CrosshairMode: { Normal: 0 },
+    LineStyle: { Dashed: 1 },
 }))
 
 describe('StockChartComponent', () => {
     beforeEach(() => {
-        mockUseNormalizedStockChart.mockReset()
-        mockUseOrderbook.mockReset()
+        mockUseStockChart.mockReset()
+        mockAddLineSeries.mockReset()
+        mockAddSeries.mockReset()
+        mockRemoveSeries.mockReset()
+        mockFitContent.mockReset()
+        mockChartRemove.mockReset()
+        mockLineSeriesApi.setData.mockReset()
+        mockLineSeriesApi.createPriceLine.mockReset()
+        mockCandleSeriesApi.setData.mockReset()
+        mockCandleSeriesApi.createPriceLine.mockReset()
 
-        mockUseOrderbook.mockReturnValue({
-            data: {
-                name: 'Bank Rakyat Indonesia',
-                icon_url: '',
-            },
+        mockLineSeriesApi.createPriceLine.mockReturnValue({})
+        mockCandleSeriesApi.createPriceLine.mockReturnValue({})
+        mockAddLineSeries.mockReturnValue(mockLineSeriesApi)
+        mockAddSeries.mockImplementation((definition: unknown) => {
+            if (definition === CandlestickSeries) return mockCandleSeriesApi
+            return mockLineSeriesApi
         })
     })
 
     it('renders loading state while chart data is fetching initially', () => {
-        mockUseNormalizedStockChart.mockReturnValue(createQueryState({ isLoading: true }))
+        mockUseStockChart.mockReturnValue(createQueryState({ isLoading: true }))
 
         const { container } = render(<StockChartComponent symbol="BBRI" />)
 
@@ -49,7 +71,7 @@ describe('StockChartComponent', () => {
 
     it('renders error state and retries when requested', () => {
         const refetch = vi.fn()
-        mockUseNormalizedStockChart.mockReturnValue(createQueryState({ error: new Error('failed'), refetch }))
+        mockUseStockChart.mockReturnValue(createQueryState({ error: new Error('failed'), refetch }))
 
         render(<StockChartComponent symbol="BBRI" />)
 
@@ -58,23 +80,8 @@ describe('StockChartComponent', () => {
         expect(refetch).toHaveBeenCalledTimes(1)
     })
 
-    it('renders empty state when normalized chart points are unavailable', () => {
-        mockUseNormalizedStockChart.mockReturnValue(
-            createQueryState({
-                data: createNormalizedStockChartData({
-                    normalized: {
-                        data: [],
-                        high: 0,
-                        low: 0,
-                        avg: 0,
-                        volatility: 0,
-                        first: 0,
-                        last: 0,
-                        trend: 'flat',
-                    },
-                }),
-            })
-        )
+    it('renders empty state when chart points are unavailable', () => {
+        mockUseStockChart.mockReturnValue(createQueryState({ data: { prices: [] } }))
 
         render(<StockChartComponent symbol="BBRI" />)
 
@@ -82,20 +89,103 @@ describe('StockChartComponent', () => {
     })
 
     it('switches timeframe and re-queries chart data with the new timeframe', async () => {
-        mockUseNormalizedStockChart.mockReturnValue(
+        mockUseStockChart.mockReturnValue(
             createQueryState({
-                data: createNormalizedStockChartData(),
+                data: {
+                    prices: [{ value: '100', formatted_date: '2026-01-01T09:00:00.000Z' }],
+                    percentage: '1.23',
+                },
             })
         )
 
         render(<StockChartComponent symbol="BBRI" />)
 
-        expect(mockUseNormalizedStockChart).toHaveBeenCalledWith('BBRI', '1d')
+        expect(mockUseStockChart).toHaveBeenCalledWith('BBRI', '1d')
 
         fireEvent.click(screen.getByRole('button', { name: '1W' }))
 
         await waitFor(() => {
-            expect(mockUseNormalizedStockChart).toHaveBeenCalledWith('BBRI', '1w')
+            expect(mockUseStockChart).toHaveBeenCalledWith('BBRI', '1w')
         })
+
+        expect(createChart).toHaveBeenCalled()
+    })
+
+    it('shows chart mode toggle and switches to candlestick mode', () => {
+        mockUseStockChart.mockReturnValue(
+            createQueryState({
+                data: {
+                    prices: [
+                        {
+                            open: '100',
+                            high: '104',
+                            low: '98',
+                            close: '102',
+                            formatted_date: '2026-01-01T09:00:00.000Z',
+                        },
+                        {
+                            open: '102',
+                            high: '106',
+                            low: '99',
+                            close: '101',
+                            formatted_date: '2026-01-01T09:01:00.000Z',
+                        },
+                    ],
+                    percentage: '1.23',
+                },
+            })
+        )
+
+        render(<StockChartComponent symbol="BBRI" />)
+
+        const lineButton = screen.getByRole('button', { name: 'Line' })
+        const candleButton = screen.getByRole('button', { name: 'Candlestick' })
+        const chartCanvas = screen.getByTestId('stock-chart-canvas')
+
+        expect(lineButton).toHaveAttribute('aria-pressed', 'true')
+        expect(candleButton).toHaveAttribute('aria-pressed', 'false')
+        expect(chartCanvas).toHaveAttribute('data-mode', 'line')
+        expect(mockAddLineSeries).toHaveBeenCalledWith(expect.any(Object))
+
+        fireEvent.click(candleButton)
+
+        expect(candleButton).toHaveAttribute('aria-pressed', 'true')
+        expect(lineButton).toHaveAttribute('aria-pressed', 'false')
+        expect(chartCanvas).toHaveAttribute('data-mode', 'candlestick')
+        expect(mockAddSeries).toHaveBeenCalledWith(CandlestickSeries, expect.any(Object))
+    })
+
+    it('uses OHLC points to compute high/low and renders candlestick mode', () => {
+        mockUseStockChart.mockReturnValue(
+            createQueryState({
+                data: {
+                    prices: [
+                        {
+                            open: '100',
+                            high: '105',
+                            low: '95',
+                            close: '102',
+                            formatted_date: '2026-01-01T09:00:00.000Z',
+                        },
+                        {
+                            open: '102',
+                            high: '108',
+                            low: '99',
+                            close: '100',
+                            formatted_date: '2026-01-01T09:01:00.000Z',
+                        },
+                    ],
+                },
+            })
+        )
+
+        render(<StockChartComponent symbol="BBRI" />)
+
+        expect(screen.getByText('108.00')).toBeInTheDocument()
+        expect(screen.getByText('95.00')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Candlestick' }))
+        expect(screen.getByTestId('stock-chart-canvas')).toHaveAttribute('data-mode', 'candlestick')
+        expect(mockAddSeries).toHaveBeenCalledWith(CandlestickSeries, expect.any(Object))
     })
 })

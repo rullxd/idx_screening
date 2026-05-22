@@ -2,20 +2,20 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import IHSGHeroCard from './IHSGHeroCard'
 
-const mockUseIHSGChart = vi.fn()
+const mockUseOrderbook = vi.fn()
 
 vi.mock('@/hooks/use-queries', () => ({
-    useIHSGChart: (...args: unknown[]) => mockUseIHSGChart(...args),
+    useOrderbook: (...args: unknown[]) => mockUseOrderbook(...args),
 }))
 
 describe('IHSGHeroCard', () => {
     beforeEach(() => {
-        mockUseIHSGChart.mockReset()
+        mockUseOrderbook.mockReset()
     })
 
     it('renders error state and retries when button is clicked', () => {
         const refetch = vi.fn()
-        mockUseIHSGChart.mockReturnValue({
+        mockUseOrderbook.mockReturnValue({
             data: undefined,
             isLoading: false,
             error: new Error('failed'),
@@ -30,20 +30,37 @@ describe('IHSGHeroCard', () => {
         expect(refetch).toHaveBeenCalledTimes(1)
     })
 
-    it('renders IHSG metrics when chart data is available', () => {
-        mockUseIHSGChart.mockReturnValue({
+    it('renders IHSG metrics when orderbook data is available', () => {
+        mockUseOrderbook.mockReturnValue({
             isLoading: false,
             error: null,
+            isFetching: false,
             refetch: vi.fn(),
             data: {
-                prices: [{ value: 7000 }, { value: 7050 }, { value: 7075 }],
+                data: {
+                    lastprice: 7050,
+                    change: 50,
+                    percentage_change: '0.71',
+                    open: 7010,
+                    previous: 7000,
+                    high: 7065,
+                    low: 6995,
+                    value: 123456789,
+                    volume: 2450000,
+                    frequency: 120345,
+                    fnet: 23450000,
+                    foreign: 42.5,
+                    domestic: 57.5,
+                },
             },
         })
 
         render(<IHSGHeroCard />)
 
         expect(screen.getByText('📊 IHSG Index')).toBeInTheDocument()
-        expect(screen.getByText('3 candles')).toBeInTheDocument()
+        expect(screen.getByText(/Asing 42\.50%/)).toBeInTheDocument()
+        expect(screen.getByText(/Domestik 57\.50%/)).toBeInTheDocument()
+        expect(screen.getByText('FNET')).toBeInTheDocument()
         expect(screen.queryByText('Failed to load IHSG data')).not.toBeInTheDocument()
     })
 })

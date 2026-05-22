@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import MarketPage from './MarketPage'
 
+const LAST_SYMBOL_STORAGE_KEY = 'market:lastSymbol'
+
 const mockChartDelay = vi.hoisted(() => ({
     value: 0,
 }))
@@ -63,6 +65,7 @@ describe('MarketPage', () => {
         mockChartDelay.value = 0
         mockWidgetState.orderbook = 'ready'
         mockWidgetState.broker = 'ready'
+        window.localStorage.removeItem(LAST_SYMBOL_STORAGE_KEY)
     })
 
     it('shows chart suspense fallback while lazy chart module is still loading', async () => {
@@ -121,5 +124,16 @@ describe('MarketPage', () => {
         })
 
         expect(await screen.findByTestId('market-chart')).toHaveTextContent('chart-BBCA')
+    })
+
+    it('uses last searched symbol from localStorage as initial selection', async () => {
+        window.localStorage.setItem(LAST_SYMBOL_STORAGE_KEY, 'TLKM')
+
+        render(<MarketPage />)
+
+        expect(screen.getByTestId('search-selected')).toHaveTextContent('selected-TLKM')
+        expect(screen.getByTestId('orderbook-card')).toHaveTextContent('orderbook-TLKM')
+        expect(screen.getByTestId('broker-card')).toHaveTextContent('broker-TLKM')
+        expect(await screen.findByTestId('market-chart')).toHaveTextContent('chart-TLKM')
     })
 })

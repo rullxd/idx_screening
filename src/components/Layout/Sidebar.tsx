@@ -4,7 +4,6 @@ import clsx from 'clsx'
 const navigationItems = [
     { path: '/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/market', label: 'Market', icon: '📉' },
-    { path: '/screener', label: 'Bandar Screener', icon: '🎯' },
     { path: '/broker-activity', label: 'Broker Activity', icon: '🏦' },
     { path: '/signals', label: 'Signal Scanner', icon: '📡' },
     { path: '/alerts', label: 'Alert & Signals', icon: '🔔' },
