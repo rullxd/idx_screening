@@ -9,6 +9,8 @@ import {
 } from '@/utils/broker-activity'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 import BrokerFlowList from './BrokerFlowList'
+import NetFlowTable from './NetFlowTable'
+import TapeReadingTable from './TapeReadingTable'
 import DateRangePicker, { DateRange } from '../DateRangePicker'
 import clsx from 'clsx'
 
@@ -32,7 +34,7 @@ export default function MarketDetectorComponent() {
         return `${year}-${month}-${day}`
     }
 
-    const { data, isLoading, error, refetch, isFetching } = useMarketDetector(stockCode, {
+    const { data, isLoading, error, refetch } = useMarketDetector(stockCode, {
         fromDate: formatDateForAPI(dateRange.from),
         toDate: formatDateForAPI(dateRange.to),
     })
@@ -105,12 +107,27 @@ export default function MarketDetectorComponent() {
                 </Card>
             ) : (
                 <>
-                    <MarketDetectorMeta
-                        stockCode={stockCode}
-                        dateFrom={parsed.dateFrom}
-                        dateTo={parsed.dateTo}
-                        isFetching={isFetching}
-                    />
+                    {/* Hero */}
+                    <div className="rounded-lg bg-dark-800 border border-dark-700 p-4">
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                            <div>
+                                <h2 className="text-xl font-bold text-dark-100">{stockCode}</h2>
+                                <p className="text-sm text-dark-400">AVG Price: {formatCurrency(summary?.average || 0)} · Total Buyer: {summary?.totalBuyers || 0} broker · Total Seller: {summary?.totalSellers || 0} broker · Value: {formatCurrency(summary?.totalValue || 0)}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="px-3 py-1 rounded-lg bg-accent-green/10 text-accent-green border border-accent-green/30 text-sm font-semibold">Bandar Detector: Big Acc ({Math.round(insight.netFlowRatio * 100)}%)</span>
+                                <span className="px-3 py-1 rounded-lg bg-dark-700 text-dark-200 border border-dark-600 text-sm font-semibold">Broker AccDist: {summary?.accdist}</span>
+                            </div>
+                        </div>
+
+                        {/* Alert */}
+                        {insight.signals && insight.signals.length > 0 && (
+                            <div className="mt-4 rounded-lg bg-accent-red/10 border border-accent-red/30 p-3">
+                                <p className="text-sm font-semibold text-accent-red">Fase Terdeteksi: {insight.signals[0].title}</p>
+                                <p className="text-sm text-dark-300 mt-1">{insight.signals[0].description}</p>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Summary Cards */}
                     {summary && (
@@ -148,6 +165,11 @@ export default function MarketDetectorComponent() {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                         <BrokerFlowList title="🟢 Top Broker Buyer" items={topBuyers} side="buy" />
                         <BrokerFlowList title="🔴 Top Broker Seller" items={topSellers} side="sell" />
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                        <NetFlowTable buyers={topBuyers} sellers={topSellers} />
+                        <TapeReadingTable buyers={topBuyers.slice(0, 12)} sellers={topSellers.slice(0, 12)} />
                     </div>
                 </>
             )}
@@ -352,27 +374,7 @@ function TierCard({ label, tier }: { label: string; tier: BandarTierData }) {
     )
 }
 
-function MarketDetectorMeta({
-    stockCode,
-    dateFrom,
-    dateTo,
-    isFetching,
-}: {
-    stockCode: string
-    dateFrom?: string
-    dateTo?: string
-    isFetching: boolean
-}) {
-    return (
-        <div className="flex items-center justify-between text-sm text-dark-500">
-            <span>
-                Saham <strong className="text-dark-200">{stockCode}</strong>
-                {dateFrom && ` · ${dateFrom}${dateTo && dateTo !== dateFrom ? ` – ${dateTo}` : ''}`}
-            </span>
-            {isFetching && <span className="animate-pulse">memperbarui…</span>}
-        </div>
-    )
-}
+// MarketDetectorMeta removed — hero shows metadata inline
 
 function SummaryCard({
     label,

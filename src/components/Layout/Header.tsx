@@ -1,11 +1,31 @@
 import { useUIStore } from '@/stores/ui-store'
+import { useEffect, useRef } from 'react'
 
 export default function Header() {
     const sidebarOpen = useUIStore((state) => state.sidebarOpen)
     const setSidebarOpen = useUIStore((state) => state.setSidebarOpen)
+    const headerRef = useRef<HTMLElement | null>(null)
+
+    useEffect(() => {
+        function setHeaderHeightVar() {
+            const el = headerRef.current
+            const h = el ? Math.ceil(el.getBoundingClientRect().height) : 64
+            document.documentElement.style.setProperty('--header-height', `${h}px`)
+        }
+
+        setHeaderHeightVar()
+        window.addEventListener('resize', setHeaderHeightVar)
+        // update on font/load changes
+        window.addEventListener('load', setHeaderHeightVar)
+
+        return () => {
+            window.removeEventListener('resize', setHeaderHeightVar)
+            window.removeEventListener('load', setHeaderHeightVar)
+        }
+    }, [])
 
     return (
-        <header className="bg-dark-900 border-b border-dark-800 sticky top-0 z-40">
+        <header ref={headerRef} className="bg-dark-900 border-b border-dark-800 sticky top-0 z-40">
             <div className="px-4 md:px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <button

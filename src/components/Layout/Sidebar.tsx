@@ -12,7 +12,10 @@ const navigationItems = [
 
 export default function Sidebar() {
     return (
-        <nav className="hidden lg:flex lg:flex-col w-64 bg-dark-900 border-r border-dark-800 relative">
+        <nav
+            className="hidden lg:flex lg:flex-col w-64 bg-dark-900 border-r border-dark-800 fixed left-0 z-30"
+            style={{ top: 'var(--header-height)', height: 'calc(100vh - var(--header-height))' }}
+        >
             <div className="flex-1 overflow-y-auto p-6">
                 <div className="text-xs font-semibold text-dark-500 uppercase tracking-wider mb-4">
                     Menu

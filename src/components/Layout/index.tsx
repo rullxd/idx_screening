@@ -18,12 +18,7 @@ export default function Layout({ children }: LayoutProps) {
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
 
-                <main
-                    className={clsx(
-                        'flex-1 overflow-auto transition-all duration-300',
-                        sidebarOpen ? 'ml-0' : 'ml-0'
-                    )}
-                >
+                <main className={clsx('flex-1 overflow-auto transition-all duration-300 lg:ml-64')}>
                     <div className="w-full max-w-[1560px] mx-auto px-4 py-4 md:px-6 md:py-5">
                         {children}
                     </div>

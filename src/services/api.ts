@@ -373,7 +373,7 @@ export async function fetchMarketDetector(
         params: {
             from: params?.fromDate,
             to: params?.toDate,
-            transaction_type: params?.transactionType || 'TRANSACTION_TYPE_NET',
+            transaction_type: params?.transactionType || 'TRANSACTION_TYPE_GROSS',
             market_board: params?.marketBoard || 'MARKET_BOARD_REGULER',
             investor_type: params?.investorType || 'INVESTOR_TYPE_ALL',
             limit: params?.limit || 25,
