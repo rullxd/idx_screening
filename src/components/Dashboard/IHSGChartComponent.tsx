@@ -3,6 +3,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useIHSGChart } from '@/hooks/use-queries'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 
+const MARKET_TIME_ZONE = 'Asia/Jakarta'
+
 const TIMEFRAMES = [
     { value: '1d', label: '1D' },
     { value: '1w', label: '1W' },
@@ -35,7 +37,7 @@ export default function IHSGChartComponent() {
                 try {
                     const date = new Date(dateStr)
                     if (!isNaN(date.getTime())) {
-                        time = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                        time = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: MARKET_TIME_ZONE })
                     }
                 } catch (e) {
                     // Fallback

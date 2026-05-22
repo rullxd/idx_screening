@@ -26,7 +26,8 @@ export function formatPercent(value: number | string): string {
 }
 
 /**
- * Format currency in Rupiah with K/M/T notation
+ * Format currency in Rupiah with M/B/T notation.
+ * B = billion/miliar, T = trillion/triliun.
  */
 export function formatCurrency(value: number | string): string {
     const num = typeof value === 'string' ? parseFloat(value) : value
@@ -35,7 +36,8 @@ export function formatCurrency(value: number | string): string {
     const abs = Math.abs(num)
     const sign = num < 0 ? '-' : ''
 
-    if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(2)}T`
+    if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(2)}T`
+    if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(2)}B`
     if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(2)}M`
 
     return `${sign}${abs.toLocaleString('id-ID')}`

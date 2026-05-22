@@ -11,6 +11,7 @@ import {
 } from '@/services/api'
 import { ScreeningResponse, ScreenerFilters } from '@/types'
 import { APIException } from '@/types'
+import { analyzeMataDewa, MataDewaAnalysis } from '@/utils/mata-dewa'
 
 /**
  * React Query hooks for all API endpoints
@@ -256,5 +257,91 @@ export function useMarketDetector(
         enabled: options?.enabled !== false && !!stockCode,
         refetchInterval: options?.refetchInterval,
         refetchIntervalInBackground: false,
+    })
+}
+
+function formatDate(date: Date): string {
+    return date.toISOString().split('T')[0]
+}
+
+function recentTradingDateStrings(days: number): string[] {
+    const dates: string[] = []
+    const cursor = new Date()
+    const hour = cursor.getHours()
+    if (hour < 19) cursor.setDate(cursor.getDate() - 1)
+
+    while (dates.length < days) {
+        const day = cursor.getDay()
+        if (day !== 0 && day !== 6) dates.unshift(formatDate(cursor))
+        cursor.setDate(cursor.getDate() - 1)
+    }
+
+    return dates
+}
+
+function latestTradingDateString(): string {
+    return recentTradingDateStrings(1)[0]
+}
+
+const mataDewaSnapshotCache = new Map<string, any>()
+
+async function fetchMataDewaSnapshot(symbol: string, date: string): Promise<any> {
+    const cacheKey = `${symbol}:${date}`
+    if (mataDewaSnapshotCache.has(cacheKey)) {
+        return mataDewaSnapshotCache.get(cacheKey)
+    }
+
+    const raw = await fetchMarketDetector(symbol, {
+        fromDate: date,
+        toDate: date,
+        transactionType: 'TRANSACTION_TYPE_GROSS',
+        marketBoard: 'MARKET_BOARD_REGULER',
+        investorType: 'INVESTOR_TYPE_ALL',
+        limit: 25,
+    })
+    mataDewaSnapshotCache.set(cacheKey, raw)
+    return raw
+}
+
+// ============= MATA DEWA HISTORICAL DASHBOARD HOOK =============
+
+export function useMataDewaDashboard(
+    symbols: string[],
+    options?: { enabled?: boolean; days?: number }
+): UseQueryResult<MataDewaAnalysis[], APIException> {
+    const cleanSymbols = symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)
+    const days = options?.days ?? 20
+    const latestTradingDate = latestTradingDateString()
+
+    return useQuery({
+        queryKey: ['mata-dewa', cleanSymbols, days, latestTradingDate],
+        queryFn: async () => {
+            const dates = recentTradingDateStrings(days)
+            const analyses = await Promise.all(
+                cleanSymbols.map(async (symbol) => {
+                    const snapshots = []
+                    for (const date of dates) {
+                        try {
+                            const raw = await fetchMataDewaSnapshot(symbol, date)
+                            snapshots.push({ date, raw })
+                        } catch (error) {
+                            // Some dates can be holidays or missing from the upstream API; keep the scan usable.
+                            console.warn(`Mata Dewa skipped ${symbol} ${date}`, error)
+                        }
+                    }
+                    return analyzeMataDewa(symbol, snapshots)
+                })
+            )
+
+            return analyses.sort((a, b) => b.score - a.score)
+        },
+        staleTime: 24 * 60 * 60 * 1000,
+        gcTime: 7 * 24 * 60 * 60 * 1000,
+        retry: shouldRetryQuery,
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        enabled: options?.enabled !== false && cleanSymbols.length > 0,
     })
 }

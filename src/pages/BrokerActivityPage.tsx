@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import BrokerActivityList from '@/components/BrokerActivity/BrokerActivityList'
 import MarketDetectorComponent from '@/components/BrokerActivity/MarketDetectorComponent'
+import MataDewaDashboard from '@/components/BrokerActivity/MataDewaDashboard'
 
 export default function BrokerActivityPage() {
-    const [activeTab, setActiveTab] = useState<'list' | 'detector'>('list')
+    const [activeTab, setActiveTab] = useState<'list' | 'detector' | 'mata-dewa'>('list')
 
     return (
         <div className="space-y-6">
@@ -23,7 +24,7 @@ export default function BrokerActivityPage() {
                             : 'text-dark-400 border-transparent hover:bg-dark-800 hover:text-dark-100'
                         }`}
                 >
-                    🏦 Daftar Broker
+                    🏦 Broker Analysis
                 </button>
                 <button
                     onClick={() => setActiveTab('detector')}
@@ -34,11 +35,21 @@ export default function BrokerActivityPage() {
                 >
                     🔬 Market Detector
                 </button>
+                <button
+                    onClick={() => setActiveTab('mata-dewa')}
+                    className={`px-4 py-2.5 rounded-lg font-semibold transition-all duration-200 border ${activeTab === 'mata-dewa'
+                            ? 'bg-accent-green/10 border-accent-green text-accent-green'
+                            : 'text-dark-400 border-transparent hover:bg-dark-800 hover:text-dark-100'
+                        }`}
+                >
+                    👁️ Mata Dewa
+                </button>
             </div>
 
             {/* Content */}
             {activeTab === 'list' && <BrokerActivityList />}
             {activeTab === 'detector' && <MarketDetectorComponent />}
+            {activeTab === 'mata-dewa' && <MataDewaDashboard />}
         </div>
     )
 }

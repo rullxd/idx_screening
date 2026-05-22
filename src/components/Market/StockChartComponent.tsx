@@ -24,6 +24,29 @@ const TIMEFRAMES = [
     { value: '5y', label: '5Y' },
 ]
 
+const MARKET_TIME_ZONE = 'Asia/Jakarta'
+
+function formatChartDateTime(timestamp: UTCTimestamp, timeframe: string): string {
+    const date = new Date(Number(timestamp) * 1000)
+    if (timeframe === '1d') {
+        return date.toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'UTC',
+        })
+    }
+
+    return date.toLocaleString('id-ID', {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'UTC',
+    })
+}
+
 interface StockChartComponentProps {
     symbol: string
 }
@@ -77,10 +100,17 @@ function stockIconUrl(symbol: string, fromApi?: string): string {
     return fromApi || `https://assets.stockbit.com/logos/companies/${symbol.toUpperCase()}.png`
 }
 
+function toMarketDate(dateStr: string): Date | null {
+    const parsed = new Date(dateStr)
+    return isNaN(parsed.getTime()) ? null : parsed
+}
+
 function toChartTimestamp(dateStr: string, idx: number): UTCTimestamp {
     const parsed = new Date(dateStr)
     if (!isNaN(parsed.getTime())) {
-        return Math.floor(parsed.getTime() / 1000) as UTCTimestamp
+        // lightweight-charts renders timestamps in UTC, so shift WIB timestamps
+        // forward to keep the visible axis label equal to the real market time.
+        return Math.floor((parsed.getTime() + 7 * 60 * 60 * 1000) / 1000) as UTCTimestamp
     }
 
     const fallbackEpoch = Date.UTC(2000, 0, 1) + idx * 60_000
@@ -127,12 +157,12 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
             let time = ''
             if (dateStr && dateStr !== '0') {
                 try {
-                    const date = new Date(dateStr)
-                    if (!isNaN(date.getTime())) {
+                    const date = toMarketDate(dateStr)
+                    if (date) {
                         time =
                             selectedTimeframe === '1d'
-                                ? date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-                                : date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })
+                                ? date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: MARKET_TIME_ZONE })
+                                : date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', timeZone: MARKET_TIME_ZONE })
                     }
                 } catch {
                     // ignore parse failures
@@ -146,10 +176,17 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
                     ? parseFloat(rawData[idx - 1]?.value || rawData[idx - 1]?.close || rawData[idx - 1]?.price || '0') || 0
                     : price
 
-            const wickHigh = high ?? Math.max(open ?? price, close ?? price, price)
-            const wickLow = low ?? Math.min(open ?? price, close ?? price, price)
-            const fallbackOpen = open ?? previousPrice
-            const fallbackClose = close ?? price
+            // For candlestick: use actual OHLC if available, otherwise calculate from price
+            const candleHigh = high ?? Math.max(open ?? price, close ?? price, price)
+            const candleLow = low ?? Math.min(open ?? price, close ?? price, price)
+            const candleOpen = open ?? previousPrice
+            const candleClose = close ?? price
+
+            // Ensure wicks extend properly from open/close to high/low
+            const wickHigh = Math.max(candleHigh, candleOpen, candleClose)
+            const wickLow = Math.min(candleLow, candleOpen, candleClose)
+            const fallbackOpen = candleOpen
+            const fallbackClose = candleClose
 
             return {
                 time,
@@ -227,6 +264,7 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
 
             <LightweightChartPanel
                 symbol={symbol}
+                selectedTimeframe={selectedTimeframe}
                 chartMode={chartMode}
                 chartData={chartData}
                 gradientColor={gradientColor}
@@ -241,6 +279,7 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
 
 function LightweightChartPanel({
     symbol,
+    selectedTimeframe,
     chartMode,
     chartData,
     gradientColor,
@@ -250,6 +289,7 @@ function LightweightChartPanel({
     avg,
 }: {
     symbol: string
+    selectedTimeframe: string
     chartMode: ChartMode
     chartData: ParsedChartPoint[]
     gradientColor: string
@@ -302,6 +342,7 @@ function LightweightChartPanel({
                 rightOffset: 4,
                 timeVisible: true,
                 secondsVisible: false,
+                tickMarkFormatter: (time: UTCTimestamp) => formatChartDateTime(time, selectedTimeframe),
             },
             crosshair: {
                 mode: CrosshairMode.Normal,
@@ -331,6 +372,7 @@ function LightweightChartPanel({
             },
             localization: {
                 locale: 'id-ID',
+                timeFormatter: (time: UTCTimestamp) => formatChartDateTime(time, selectedTimeframe),
             },
         })
 
@@ -342,7 +384,7 @@ function LightweightChartPanel({
             seriesRef.current = null
             markerLinesRef.current = []
         }
-    }, [])
+    }, [selectedTimeframe])
 
     useEffect(() => {
         const chart = chartRef.current
@@ -481,11 +523,10 @@ function TimeframeButtons({
                 <button
                     key={tf.value}
                     onClick={() => onSelect(tf.value)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                        selectedTimeframe === tf.value
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${selectedTimeframe === tf.value
                             ? 'bg-accent-blue text-white'
                             : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
-                    }`}
+                        }`}
                 >
                     {tf.label}
                 </button>
@@ -514,9 +555,8 @@ function ChartModeButtons({
                     type="button"
                     onClick={() => onSelect(mode.value)}
                     aria-pressed={selectedMode === mode.value}
-                    className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${
-                        selectedMode === mode.value ? 'bg-accent-blue text-white' : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
-                    }`}
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${selectedMode === mode.value ? 'bg-accent-blue text-white' : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                        }`}
                 >
                     {mode.label}
                 </button>

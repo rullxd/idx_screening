@@ -9,7 +9,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-    const sidebarOpen = useUIStore((state) => state.sidebarOpen)
+    useUIStore((state) => state.sidebarOpen) // subscribe for changes (reserved for future open/close behavior)
 
     return (
         <div className="min-h-screen flex flex-col bg-dark-950">

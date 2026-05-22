@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useMarketDetector } from '@/hooks/use-queries'
 import { formatBigNumber, formatCurrency } from '@/utils/formatters'
 import {
@@ -15,8 +15,12 @@ import DateRangePicker, { DateRange } from '../DateRangePicker'
 import clsx from 'clsx'
 
 export default function MarketDetectorComponent() {
-    const [inputCode, setInputCode] = useState('BNBR')
-    const [stockCode, setStockCode] = useState('BNBR')
+    const [inputCode, setInputCode] = useState(() => {
+        return (typeof window !== 'undefined' && localStorage.getItem('lastStock')) || 'BNBR'
+    })
+    const [stockCode, setStockCode] = useState(() => {
+        return (typeof window !== 'undefined' && localStorage.getItem('lastStock')) || 'BNBR'
+    })
 
     const defaultDateRange = useMemo(() => {
         const to = new Date()
@@ -25,7 +29,20 @@ export default function MarketDetectorComponent() {
         return { from, to }
     }, [])
 
-    const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange)
+    const [dateRange, setDateRange] = useState<DateRange>(() => {
+        try {
+            if (typeof window !== 'undefined') {
+                const raw = localStorage.getItem('lastMarketDateRange')
+                if (raw) {
+                    const parsed = JSON.parse(raw)
+                    return { from: new Date(parsed.from), to: new Date(parsed.to) }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return defaultDateRange
+    })
 
     const formatDateForAPI = (date: Date): string => {
         const year = date.getFullYear()
@@ -33,6 +50,20 @@ export default function MarketDetectorComponent() {
         const day = String(date.getDate()).padStart(2, '0')
         return `${year}-${month}-${day}`
     }
+
+    // Persist dateRange to localStorage when it changes
+    useEffect(() => {
+        try {
+            if (typeof window !== 'undefined') {
+                localStorage.setItem(
+                    'lastMarketDateRange',
+                    JSON.stringify({ from: dateRange.from.toISOString(), to: dateRange.to.toISOString() })
+                )
+            }
+        } catch {
+            // ignore
+        }
+    }, [dateRange])
 
     const { data, isLoading, error, refetch } = useMarketDetector(stockCode, {
         fromDate: formatDateForAPI(dateRange.from),
@@ -44,6 +75,11 @@ export default function MarketDetectorComponent() {
         if (next.length < 3) return
         setStockCode(next)
         setInputCode(next)
+        try {
+            localStorage.setItem('lastStock', next)
+        } catch {
+            // ignore
+        }
     }
 
     const parsed = parseMarketDetector(data ?? {})

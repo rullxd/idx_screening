@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useBrokerActivity } from '@/hooks/use-queries'
 import { formatCurrency } from '@/utils/formatters'
 import { parseBrokerActivity } from '@/utils/broker-activity'
@@ -9,8 +9,12 @@ import StockTransactionList from './StockTransactionList'
 const POPULAR_BROKERS = ['AK', 'CC', 'YP', 'MG', 'XL', 'PD', 'NI', 'ZP']
 
 export default function BrokerActivityList() {
-    const [inputCode, setInputCode] = useState('AK')
-    const [brokerCode, setBrokerCode] = useState('AK')
+    const [inputCode, setInputCode] = useState(() => {
+        return (typeof window !== 'undefined' && localStorage.getItem('lastBroker')) || 'AK'
+    })
+    const [brokerCode, setBrokerCode] = useState(() => {
+        return (typeof window !== 'undefined' && localStorage.getItem('lastBroker')) || 'AK'
+    })
 
     // Initialize date range with last 7 days
     const defaultDateRange = useMemo(() => {
@@ -20,7 +24,20 @@ export default function BrokerActivityList() {
         return { from, to }
     }, [])
 
-    const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange)
+    const [dateRange, setDateRange] = useState<DateRange>(() => {
+        try {
+            if (typeof window !== 'undefined') {
+                const raw = localStorage.getItem('lastBrokerDateRange')
+                if (raw) {
+                    const parsed = JSON.parse(raw)
+                    return { from: new Date(parsed.from), to: new Date(parsed.to) }
+                }
+            }
+        } catch {
+            // ignore
+        }
+        return defaultDateRange
+    })
 
     // Format dates for API
     const formatDateForAPI = (date: Date): string => {
@@ -29,6 +46,20 @@ export default function BrokerActivityList() {
         const day = String(date.getDate()).padStart(2, '0')
         return `${year}-${month}-${day}`
     }
+
+    // Persist broker dateRange to localStorage when it changes
+    useEffect(() => {
+        try {
+            if (typeof window !== 'undefined') {
+                localStorage.setItem(
+                    'lastBrokerDateRange',
+                    JSON.stringify({ from: dateRange.from.toISOString(), to: dateRange.to.toISOString() })
+                )
+            }
+        } catch {
+            // ignore
+        }
+    }, [dateRange])
 
     const { data, isLoading, error, refetch, isFetching } = useBrokerActivity(brokerCode, {
         fromDate: formatDateForAPI(dateRange.from),
@@ -40,6 +71,11 @@ export default function BrokerActivityList() {
         if (next.length < 2) return
         setBrokerCode(next)
         setInputCode(next)
+        try {
+            localStorage.setItem('lastBroker', next)
+        } catch {
+            // ignore
+        }
     }
 
     const { buys, sells, date } = parseBrokerActivity(data ?? {})
