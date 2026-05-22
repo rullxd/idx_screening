@@ -343,6 +343,19 @@ export async function fetchStockChart(
     })
 }
 
+export async function fetchStockChartbit(
+    stockCode: string,
+    params?: { timeframe?: string; period?: string; from?: string; to?: string }
+): Promise<StockChartResponse> {
+    const from = params?.from || '2026-05-22'
+    const to = params?.to || '2023-05-22'
+
+    return apiClient.get('/stock-chartbit', {
+        params: { symbol: stockCode.toUpperCase(), from, to },
+        cancelKey: `stock-chartbit-${stockCode}-${from}-${to}`,
+    })
+}
+
 // ============= TRENDING ENDPOINTS =============
 
 export async function fetchTrendingStocks(params?: {

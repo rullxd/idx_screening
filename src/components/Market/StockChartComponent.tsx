@@ -3,6 +3,7 @@ import {
     CandlestickSeries,
     createChart,
     CrosshairMode,
+    HistogramSeries,
     LineSeries,
     LineStyle,
     type IChartApi,
@@ -10,7 +11,7 @@ import {
     type ISeriesApi,
     type UTCTimestamp,
 } from 'lightweight-charts'
-import { useStockChart } from '@/hooks/use-queries'
+import { useStockChart, useStockChartbit } from '@/hooks/use-queries'
 import { Card, ErrorState, LoadingSpinner } from '@/components'
 
 const TIMEFRAMES = [
@@ -26,23 +27,12 @@ const TIMEFRAMES = [
 
 const MARKET_TIME_ZONE = 'Asia/Jakarta'
 
-function formatChartDateTime(timestamp: UTCTimestamp, timeframe: string): string {
+function formatChartDateTime(timestamp: UTCTimestamp): string {
     const date = new Date(Number(timestamp) * 1000)
-    if (timeframe === '1d') {
-        return date.toLocaleTimeString('id-ID', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'UTC',
-        })
-    }
-
-    return date.toLocaleString('id-ID', {
-        weekday: 'short',
+    return date.toLocaleDateString('id-ID', {
         day: '2-digit',
         month: 'short',
         year: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
         timeZone: 'UTC',
     })
 }
@@ -57,10 +47,13 @@ type LegacySeriesChartApi = IChartApi & {
     addLineSeries?: (options?: Record<string, unknown>) => ISeriesApi<'Line'>
 }
 
+type VolumeSeriesApi = ISeriesApi<'Histogram'>
+
 type ParsedChartPoint = {
     time: string
     chartTime: UTCTimestamp
     price: number
+    volume: number
     open: number | null
     high: number
     low: number
@@ -117,12 +110,33 @@ function toChartTimestamp(dateStr: string, idx: number): UTCTimestamp {
     return Math.floor(fallbackEpoch / 1000) as UTCTimestamp
 }
 
+function extractChartRows(payload: any): any[] {
+    const candidates = [
+        payload?.prices,
+        payload?.data?.prices,
+        payload?.data?.data?.prices,
+        payload?.data?.chart,
+        payload?.data?.chartbit,
+        payload?.chart,
+        payload?.chartbit,
+        payload?.data,
+        payload,
+    ]
+
+    return candidates.find(Array.isArray) || []
+}
+
 export default function StockChartComponent({ symbol }: StockChartComponentProps) {
     const [selectedTimeframe, setSelectedTimeframe] = useState('1d')
     const [chartMode, setChartMode] = useState<ChartMode>('line')
     const { data, isLoading, error, refetch } = useStockChart(symbol, selectedTimeframe)
+    const {
+        data: candleResponse,
+        isLoading: isCandleLoading,
+        error: candleError,
+    } = useStockChartbit(symbol, selectedTimeframe, { enabled: chartMode === 'candlestick' })
 
-    if (isLoading) return <LoadingSpinner />
+    if (isLoading || (chartMode === 'candlestick' && isCandleLoading)) return <LoadingSpinner />
     if (error) {
         return (
             <ErrorState
@@ -133,15 +147,8 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
         )
     }
 
-    const rawData = Array.isArray(data?.prices)
-        ? data.prices
-        : Array.isArray(data)
-            ? data
-            : Array.isArray(data?.data?.prices)
-                ? data.data.prices
-                : Array.isArray(data?.data)
-                    ? data.data
-                    : []
+    const candleRows = chartMode === 'candlestick' && !candleError ? extractChartRows(candleResponse) : []
+    const rawData = candleRows.length ? candleRows : extractChartRows(data)
 
     const chartData: ParsedChartPoint[] = rawData
         .map((item: any, idx: number) => {
@@ -152,6 +159,7 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
             const high = toNumber(item.high)
             const low = toNumber(item.low)
             const close = closeFromOhlc
+            const volume = toNumber(item.volume) ?? toNumber(item.vol) ?? toNumber(item.transaction_volume) ?? 0
             const dateStr = item.formatted_date || item.date || ''
 
             let time = ''
@@ -192,6 +200,7 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
                 time,
                 chartTime: toChartTimestamp(String(dateStr), idx),
                 price,
+                volume,
                 open: open ?? fallbackOpen,
                 high: Math.max(wickHigh, fallbackOpen, fallbackClose),
                 low: Math.min(wickLow, fallbackOpen, fallbackClose),
@@ -199,6 +208,7 @@ export default function StockChartComponent({ symbol }: StockChartComponentProps
             }
         })
         .filter((d: ParsedChartPoint) => d.price >= 0)
+        .sort((a: ParsedChartPoint, b: ParsedChartPoint) => Number(a.chartTime) - Number(b.chartTime))
 
     const hasOhlcData = chartData.some(
         (d: ParsedChartPoint) => d.open != null && d.close != null && Number.isFinite(d.high) && Number.isFinite(d.low)
@@ -301,6 +311,7 @@ function LightweightChartPanel({
     const containerRef = useRef<HTMLDivElement | null>(null)
     const chartRef = useRef<IChartApi | null>(null)
     const seriesRef = useRef<ISeriesApi<'Line'> | ISeriesApi<'Candlestick'> | null>(null)
+    const volumeSeriesRef = useRef<VolumeSeriesApi | null>(null)
     const markerLinesRef = useRef<IPriceLine[]>([])
 
     const lineData = useMemo(() => chartData.map((d) => ({ time: d.chartTime, value: d.price })), [chartData])
@@ -312,6 +323,15 @@ function LightweightChartPanel({
                 high: d.high,
                 low: d.low,
                 close: d.close ?? d.price,
+            })),
+        [chartData]
+    )
+    const volumeData = useMemo(
+        () =>
+            chartData.map((d) => ({
+                time: d.chartTime,
+                value: d.volume,
+                color: (d.close ?? d.price) >= (d.open ?? d.price) ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)',
             })),
         [chartData]
     )
@@ -342,7 +362,7 @@ function LightweightChartPanel({
                 rightOffset: 4,
                 timeVisible: true,
                 secondsVisible: false,
-                tickMarkFormatter: (time: UTCTimestamp) => formatChartDateTime(time, selectedTimeframe),
+                tickMarkFormatter: (time: UTCTimestamp) => formatChartDateTime(time),
             },
             crosshair: {
                 mode: CrosshairMode.Normal,
@@ -372,7 +392,7 @@ function LightweightChartPanel({
             },
             localization: {
                 locale: 'id-ID',
-                timeFormatter: (time: UTCTimestamp) => formatChartDateTime(time, selectedTimeframe),
+                timeFormatter: (time: UTCTimestamp) => formatChartDateTime(time),
             },
         })
 
@@ -382,6 +402,7 @@ function LightweightChartPanel({
             chart.remove()
             chartRef.current = null
             seriesRef.current = null
+            volumeSeriesRef.current = null
             markerLinesRef.current = []
         }
     }, [selectedTimeframe])
@@ -394,6 +415,11 @@ function LightweightChartPanel({
             chart.removeSeries(seriesRef.current)
             seriesRef.current = null
             markerLinesRef.current = []
+        }
+
+        if (volumeSeriesRef.current) {
+            chart.removeSeries(volumeSeriesRef.current)
+            volumeSeriesRef.current = null
         }
 
         const legacyChart = chart as LegacySeriesChartApi
@@ -431,6 +457,17 @@ function LightweightChartPanel({
             series.setData(lineData)
         }
 
+        const volumeSeries = chart.addSeries(HistogramSeries, {
+            priceFormat: { type: 'volume' },
+            priceScaleId: 'volume',
+            priceLineVisible: false,
+            lastValueVisible: false,
+        })
+        chart.priceScale('volume').applyOptions({
+            scaleMargins: { top: 0.78, bottom: 0 },
+        })
+        volumeSeries.setData(volumeData)
+
         const createMarker = (price: number, color: string) =>
             series.createPriceLine({
                 price,
@@ -444,8 +481,9 @@ function LightweightChartPanel({
         markerLinesRef.current = [createMarker(high, '#10b981'), createMarker(low, '#ef4444'), createMarker(avg, '#f59e0b')]
 
         seriesRef.current = series
+        volumeSeriesRef.current = volumeSeries
         chart.timeScale().fitContent()
-    }, [useCandles, lineData, candleData, gradientColor, high, low, avg])
+    }, [useCandles, lineData, candleData, volumeData, gradientColor, high, low, avg])
 
     return (
         <div

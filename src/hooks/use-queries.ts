@@ -6,6 +6,7 @@ import {
     fetchIHSGChart,
     fetchOrderbook,
     fetchStockChart,
+    fetchStockChartbit,
     fetchTrendingStocks,
     fetchMarketDetector,
 } from '@/services/api'
@@ -178,6 +179,26 @@ export function useStockChart(
             const data = await fetchStockChart(symbol, { timeframe })
             return data
         },
+        staleTime: 5 * 1000,
+        gcTime: 10 * 1000,
+        retry: shouldRetryQuery,
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        enabled: options?.enabled !== false && !!symbol,
+        refetchInterval: options?.refetchInterval,
+    })
+}
+
+export function useStockChartbit(
+    symbol: string,
+    timeframe: string = '1d',
+    options?: { enabled?: boolean; refetchInterval?: number }
+): UseQueryResult<any, APIException> {
+    return useQuery({
+        queryKey: ['stock', 'chartbit', symbol, timeframe],
+        queryFn: async () => fetchStockChartbit(symbol, { timeframe }),
         staleTime: 5 * 1000,
         gcTime: 10 * 1000,
         retry: shouldRetryQuery,

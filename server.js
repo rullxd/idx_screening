@@ -57,6 +57,7 @@ const CACHE_TTL = {
     orderbook: 5 * 1000,
     trending: 30 * 1000,
     stockChart: 45 * 1000,
+    chartbit: 45 * 1000,
     ihsgChart: 5 * 1000,  // Reduced from 30s to 5s for faster timeframe switching
     brokerRanking: 5 * 60 * 1000
 };
@@ -86,6 +87,44 @@ function getIHSGChartTimeframe(timeframe, period) {
     };
 
     return timeframeMap[timeframe || period || '1d'] || 'today';
+}
+
+function formatDateYYYYMMDD(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getChartbitDateRange(timeframe = 'today') {
+    const toDate = new Date();
+    const fromDate = new Date(toDate);
+    const key = String(timeframe || 'today').toLowerCase();
+
+    if (key === 'today' || key === '1d' || key === 'intraday') {
+        fromDate.setDate(toDate.getDate() - 1);
+    } else if (key === 'weekly' || key === '1w') {
+        fromDate.setDate(toDate.getDate() - 7);
+    } else if (key === '1m' || key === 'monthly') {
+        fromDate.setMonth(toDate.getMonth() - 1);
+    } else if (key === '3m' || key === '3month') {
+        fromDate.setMonth(toDate.getMonth() - 3);
+    } else if (key === 'ytd') {
+        fromDate.setMonth(0, 1);
+    } else if (key === '1y' || key === 'yearly') {
+        fromDate.setFullYear(toDate.getFullYear() - 1);
+    } else if (key === '3y' || key === '3year') {
+        fromDate.setFullYear(toDate.getFullYear() - 3);
+    } else if (key === '5y' || key === '5year') {
+        fromDate.setFullYear(toDate.getFullYear() - 5);
+    } else {
+        fromDate.setMonth(toDate.getMonth() - 1);
+    }
+
+    return {
+        from: formatDateYYYYMMDD(fromDate),
+        to: formatDateYYYYMMDD(toDate),
+    };
 }
 
 function getOrCreateStreamManager(key, intervalMs, fetcher) {
@@ -392,6 +431,88 @@ app.get('/api/stock-chart', async (req, res) => {
     }
 });
 
+// API Proxy Endpoint — Stockbit Chartbit OHLC candles
+app.get('/api/stock-chartbit', async (req, res) => {
+    try {
+        const { symbol = 'BBCA', timeframe = 'today', from, to } = req.query;
+        const stockCode = symbol.toUpperCase();
+        const defaultRange = getChartbitDateRange(timeframe);
+        const range = {
+            from: from || defaultRange.from,
+            to: to || defaultRange.to,
+        };
+        const chartbitUrl = `https://exodus.stockbit.com/chartbit/${encodeURIComponent(stockCode)}/price/daily?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+        const fallbackUrl = `https://exodus.stockbit.com/charts/${encodeURIComponent(stockCode)}/daily?timeframe=${encodeURIComponent(timeframe)}`;
+        let url = chartbitUrl;
+
+        let result;
+        try {
+            result = await fetchJsonWithCache({
+                cacheKey: chartbitUrl,
+                ttlMs: CACHE_TTL.chartbit,
+                url: chartbitUrl,
+                logLabel: `stock chartbit ${stockCode} ${timeframe}`,
+                headers: {
+                    'Authorization': `Bearer ${TOKEN}`,
+                    'User-Agent': 'Mozilla/5.0',
+                    'Accept': 'application/json'
+                }
+            });
+        } catch (chartbitError) {
+            console.warn(`⚠️ Chartbit failed for ${stockCode}; falling back to charts: ${chartbitError.message}`);
+            url = fallbackUrl;
+            result = await fetchJsonWithCache({
+                cacheKey: fallbackUrl,
+                ttlMs: CACHE_TTL.stockChart,
+                url: fallbackUrl,
+                logLabel: `stock chartbit fallback ${stockCode} ${timeframe}`,
+                headers: {
+                    'Authorization': `Bearer ${TOKEN}`,
+                    'User-Agent': 'Mozilla/5.0',
+                    'Accept': 'application/json'
+                }
+            });
+        }
+
+        const { data, cacheHit } = result;
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
+        res.set('X-Chart-Source', url === chartbitUrl ? 'chartbit' : 'charts-fallback');
+        res.json(data);
+    } catch (error) {
+        console.error('❌ Stock Chartbit Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API Proxy Endpoint — Stockbit Chartbit OHLC candles
+app.get('/api/stock-chartbit-raw', async (req, res) => {
+    try {
+        const { symbol = 'BBCA', timeframe = 'today', from, to } = req.query;
+        const defaultRange = getChartbitDateRange(timeframe);
+        const range = {
+            from: from || defaultRange.from,
+            to: to || defaultRange.to,
+        };
+        const url = `https://exodus.stockbit.com/chartbit/${encodeURIComponent(symbol.toUpperCase())}/price/daily?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+        const { data, cacheHit } = await fetchJsonWithCache({
+            cacheKey: url,
+            ttlMs: CACHE_TTL.chartbit,
+            url,
+            logLabel: `stock chartbit ${symbol.toUpperCase()} ${timeframe}`,
+            headers: {
+                'Authorization': `Bearer ${TOKEN}`,
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+        res.set('X-Cache', cacheHit ? 'HIT' : 'MISS');
+        res.json(data);
+    } catch (error) {
+        console.error('❌ Stock Chartbit Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // API Proxy Endpoint — IHSG Intraday Chart
 app.get('/api/ihsg-chart', async (req, res) => {
     try {
@@ -531,6 +652,11 @@ app.get('/api/broker-ranking', async (req, res) => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', message: 'Backend is running' });
+});
+
+// Keep unknown API routes JSON-only; otherwise Express static fallback returns index.html.
+app.use('/api', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.originalUrl}` });
 });
 
 // SPA fallback: serve index.html for all non-API routes
