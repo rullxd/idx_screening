@@ -26,6 +26,10 @@ const TIMEFRAMES = [
 ]
 
 const MARKET_TIME_ZONE = 'Asia/Jakarta'
+const CANDLE_UP_COLOR = '#f8fafc'
+const CANDLE_DOWN_COLOR = '#2563eb'
+const VOLUME_UP_COLOR = 'rgba(248, 250, 252, 0.35)'
+const VOLUME_DOWN_COLOR = 'rgba(37, 99, 235, 0.42)'
 
 function formatChartDateTime(timestamp: UTCTimestamp): string {
     const date = new Date(Number(timestamp) * 1000)
@@ -331,7 +335,7 @@ function LightweightChartPanel({
             chartData.map((d) => ({
                 time: d.chartTime,
                 value: d.volume,
-                color: (d.close ?? d.price) >= (d.open ?? d.price) ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)',
+                color: (d.close ?? d.price) >= (d.open ?? d.price) ? VOLUME_UP_COLOR : VOLUME_DOWN_COLOR,
             })),
         [chartData]
     )
@@ -426,12 +430,12 @@ function LightweightChartPanel({
 
         const series = useCandles
             ? chart.addSeries(CandlestickSeries, {
-                upColor: '#10b981',
-                downColor: '#ef4444',
-                borderUpColor: '#10b981',
-                borderDownColor: '#ef4444',
-                wickUpColor: '#10b981',
-                wickDownColor: '#ef4444',
+                upColor: CANDLE_UP_COLOR,
+                downColor: CANDLE_DOWN_COLOR,
+                borderUpColor: CANDLE_UP_COLOR,
+                borderDownColor: CANDLE_DOWN_COLOR,
+                wickUpColor: CANDLE_UP_COLOR,
+                wickDownColor: CANDLE_DOWN_COLOR,
                 priceLineVisible: true,
                 lastValueVisible: true,
             })
