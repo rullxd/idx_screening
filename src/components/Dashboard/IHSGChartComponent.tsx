@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
-import { useIHSGChart } from '@/hooks/use-queries'
+import { useIHSGChart, useOrderbook } from '@/hooks/use-queries'
+import { formatBigNumber, formatVolume } from '@/utils/formatters'
 import { Card, LoadingSpinner, ErrorState } from '@/components'
 
 const MARKET_TIME_ZONE = 'Asia/Jakarta'
@@ -19,9 +20,34 @@ const TIMEFRAMES = [
 export default function IHSGChartComponent() {
     const [selectedTimeframe, setSelectedTimeframe] = useState('1d')
     const { data, isLoading, error, refetch } = useIHSGChart(selectedTimeframe)
+    const { data: orderbookData, isLoading: isOrderbookLoading, error: orderbookError, refetch: refetchOrderbook, isFetching } = useOrderbook('IHSG')
 
-    if (isLoading) return <LoadingSpinner />
+    if (isLoading || isOrderbookLoading) return <LoadingSpinner />
     if (error) return <ErrorState title="Error" message="Failed to load chart data" onRetry={() => refetch()} />
+    if (orderbookError) return <ErrorState title="Error" message="Failed to load IHSG data" onRetry={() => refetchOrderbook()} />
+
+    const ihsg = orderbookData?.data || orderbookData || {}
+    const toNumber = (value: unknown): number => {
+        const num = typeof value === 'string' ? parseFloat(value) : Number(value)
+        return Number.isFinite(num) ? num : 0
+    }
+
+    const indexPrice = toNumber(ihsg.lastprice || ihsg.close || ihsg.previous)
+    const indexChange = toNumber(ihsg.change)
+    const indexChangePct = toNumber(ihsg.percentage_change ?? ihsg.percentage)
+    const indexHigh = toNumber(ihsg.high)
+    const indexLow = toNumber(ihsg.low)
+    const indexOpen = toNumber(ihsg.open)
+    const indexPrevious = toNumber(ihsg.previous)
+    const indexValue = toNumber(ihsg.value)
+    const indexVolume = toNumber(ihsg.volume)
+    const indexFrequency = toNumber(ihsg.frequency)
+    const indexFnet = toNumber(ihsg.fnet)
+    const foreign = toNumber(ihsg.foreign)
+    const domestic = toNumber(ihsg.domestic)
+    const indexRange = indexHigh - indexLow
+    const indexPositive = indexChangePct >= 0
+    const indexChangeClass = indexPositive ? 'text-accent-green' : 'text-accent-red'
 
     // Extract data array - API returns metadata object with prices array
     const rawData = Array.isArray(data?.prices) ? data.prices : (Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []))
@@ -145,57 +171,89 @@ export default function IHSGChartComponent() {
     }
 
     return (
-        <Card className="p-6">
-            <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 className="text-lg font-semibold text-dark-100">📈 IHSG Chart</h3>
-                        <p className="text-xs text-dark-500 mt-1">Timeframe: {selectedTimeframe.toUpperCase()} • {chartData.length} data points</p>
-                    </div>
-                    <div className={`text-right font-semibold ${trendColor}`}>
-                        {trend === 'naik' ? '📈' : trend === 'turun' ? '📉' : '➡️'} {trend.toUpperCase()}
-                    </div>
-                </div>
+        <Card className="p-6 lg:p-8 bg-gradient-to-br from-dark-900 via-dark-900 to-dark-800 border border-dark-700 overflow-hidden">
+            <div className="mb-6 space-y-5">
+                <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
+                    <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <p className="text-xs text-dark-400 uppercase tracking-[0.2em] mb-2">IHSG Index</p>
+                                <div className="flex items-baseline gap-2">
+                                    <h3 className="text-4xl lg:text-5xl font-bold text-dark-100 leading-none">{formatBigNumber(indexPrice)}</h3>
+                                    {isFetching && <span className="text-xs text-dark-500 animate-pulse">↻</span>}
+                                </div>
+                                <p className={`text-base font-semibold mt-3 ${indexChangeClass}`}>
+                                    {indexPositive ? '+' : ''}{formatBigNumber(indexChange)} ({indexChangePct >= 0 ? '+' : ''}{indexChangePct.toFixed(2)}%)
+                                </p>
+                            </div>
+                            <div className="text-right text-dark-400 text-xs shrink-0">
+                                <p>{new Date().toLocaleTimeString('id-ID')}</p>
+                                <p className="mt-1">Real-time data</p>
+                            </div>
+                        </div>
 
-                {/* Timeframe Selector */}
-                <div className="mb-4 flex flex-wrap gap-2">
-                    {TIMEFRAMES.map((tf) => (
-                        <button
-                            key={tf.value}
-                            onClick={() => setSelectedTimeframe(tf.value)}
-                            className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${selectedTimeframe === tf.value
-                                    ? 'bg-accent-blue text-white'
-                                    : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
-                                }`}
-                        >
-                            {tf.label}
-                        </button>
-                    ))}
-                </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                            <div className="bg-dark-800/80 rounded-lg p-2.5 border border-dark-700/60"><p className="text-dark-500">OPEN</p><p className="text-dark-100 font-bold">{indexOpen.toFixed(0)}</p></div>
+                            <div className="bg-dark-800/80 rounded-lg p-2.5 border border-dark-700/60"><p className="text-dark-500">PREV</p><p className="text-dark-100 font-bold">{indexPrevious.toFixed(0)}</p></div>
+                            <div className="bg-dark-800/80 rounded-lg p-2.5 border border-dark-700/60"><p className="text-dark-500">RANGE</p><p className="text-accent-blue font-bold">{indexRange.toFixed(2)}</p></div>
+                            <div className="bg-dark-800/80 rounded-lg p-2.5 border border-dark-700/60"><p className="text-dark-500">VALUE</p><p className="text-dark-100 font-semibold">{formatBigNumber(indexValue)}</p></div>
+                            <div className="bg-dark-800/80 rounded-lg p-2.5 border border-dark-700/60"><p className="text-dark-500">VOLUME</p><p className="text-dark-100 font-semibold">{formatVolume(indexVolume)}</p></div>
+                            <div className="bg-dark-800/80 rounded-lg p-2.5 border border-dark-700/60"><p className="text-dark-500">FREQ</p><p className="text-dark-100 font-semibold">{formatBigNumber(indexFrequency)}</p></div>
+                            <div className="bg-dark-800/80 rounded-lg p-2.5 border border-dark-700/60 sm:col-span-3"><p className="text-dark-500">FNET</p><p className={`font-semibold ${indexFnet >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>{indexFnet >= 0 ? '+' : ''}{formatBigNumber(indexFnet)}</p></div>
+                        </div>
+                        <p className="text-xs text-dark-500">Asing {foreign.toFixed(2)}% · Domestik {domestic.toFixed(2)}%</p>
+                    </div>
 
-                {/* Statistics Summary */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-                    <div className="bg-dark-800 rounded p-2">
-                        <p className="text-dark-400">HIGH</p>
-                        <p className="text-dark-100 font-bold">{high.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-dark-800 rounded p-2">
-                        <p className="text-dark-400">LOW</p>
-                        <p className="text-dark-100 font-bold">{low.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-dark-800 rounded p-2">
-                        <p className="text-dark-400">AVG</p>
-                        <p className="text-dark-100 font-bold">{avg.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-dark-800 rounded p-2">
-                        <p className="text-dark-400">RANGE</p>
-                        <p className="text-dark-100 font-bold">{volatility.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-dark-800 rounded p-2">
-                        <p className="text-dark-400">CHANGE</p>
-                        <p className={`font-bold ${last > first ? 'text-accent-green' : 'text-accent-red'}`}>
-                            {(last - first).toFixed(2)}
-                        </p>
+                    <div className="min-w-0">
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-dark-100">IHSG Chart</h3>
+                                <p className="text-xs text-dark-500 mt-1">Timeframe: {selectedTimeframe.toUpperCase()} • {chartData.length} data points</p>
+                            </div>
+                            <div className={`text-right text-sm font-bold ${trendColor}`}>{trend.toUpperCase()}</div>
+                        </div>
+
+                        {/* Timeframe Selector */}
+                        <div className="mb-4 flex flex-wrap gap-2">
+                            {TIMEFRAMES.map((tf) => (
+                                <button
+                                    key={tf.value}
+                                    onClick={() => setSelectedTimeframe(tf.value)}
+                                    className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${selectedTimeframe === tf.value
+                                        ? 'bg-accent-blue text-white'
+                                        : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                                        }`}
+                                >
+                                    {tf.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Statistics Summary */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                            <div className="bg-dark-800 rounded p-2">
+                                <p className="text-dark-400">HIGH</p>
+                                <p className="text-dark-100 font-bold">{high.toFixed(2)}</p>
+                            </div>
+                            <div className="bg-dark-800 rounded p-2">
+                                <p className="text-dark-400">LOW</p>
+                                <p className="text-dark-100 font-bold">{low.toFixed(2)}</p>
+                            </div>
+                            <div className="bg-dark-800 rounded p-2">
+                                <p className="text-dark-400">AVG</p>
+                                <p className="text-dark-100 font-bold">{avg.toFixed(2)}</p>
+                            </div>
+                            <div className="bg-dark-800 rounded p-2">
+                                <p className="text-dark-400">RANGE</p>
+                                <p className="text-dark-100 font-bold">{volatility.toFixed(2)}</p>
+                            </div>
+                            <div className="bg-dark-800 rounded p-2">
+                                <p className="text-dark-400">CHANGE</p>
+                                <p className={`font-bold ${last > first ? 'text-accent-green' : 'text-accent-red'}`}>
+                                    {(last - first).toFixed(2)}
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

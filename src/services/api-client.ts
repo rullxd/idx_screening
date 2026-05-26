@@ -1,6 +1,5 @@
 import axios, { AxiosError, AxiosInstance } from 'axios'
 import { APIResponse, APIException } from '@/types'
-import DOMPurify from 'dompurify'
 
 /**
  * Centralized API client with type safety, error handling, and race condition protection
@@ -163,25 +162,6 @@ class APIClient {
         }
     }
 
-    /**
-     * Sanitize user input to prevent XSS
-     */
-    sanitizeInput(input: string): string {
-        return DOMPurify.sanitize(input, { ALLOWED_TAGS: [] })
-    }
-
-    /**
-     * Validate and sanitize URL
-     */
-    isValidURL(url: string): boolean {
-        try {
-            const parsed = new URL(url, window.location.origin)
-            // Only allow same origin
-            return parsed.origin === window.location.origin
-        } catch {
-            return false
-        }
-    }
 }
 
 export const apiClient = new APIClient('/api')

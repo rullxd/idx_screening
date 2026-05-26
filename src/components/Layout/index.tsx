@@ -5,25 +5,25 @@ import Sidebar from './Sidebar'
 import clsx from 'clsx'
 
 interface LayoutProps {
-    children: ReactNode
+ children: ReactNode
 }
 
 export default function Layout({ children }: LayoutProps) {
-    useUIStore((state) => state.sidebarOpen) // subscribe for changes (reserved for future open/close behavior)
+ const sidebarOpen = useUIStore((state) => state.sidebarOpen)
 
-    return (
-        <div className="min-h-screen flex flex-col bg-dark-950">
-            <Header />
+ return (
+ <div className="min-h-screen flex flex-col bg-dark-950">
+ <Header />
 
-            <div className="flex flex-1 overflow-hidden">
-                <Sidebar />
+ <div className="flex flex-1 overflow-hidden">
+ <Sidebar />
 
-                <main className={clsx('flex-1 overflow-auto transition-all duration-300 lg:ml-64')}>
-                    <div className="w-full max-w-[1560px] mx-auto px-4 py-4 md:px-6 md:py-5">
-                        {children}
-                    </div>
-                </main>
-            </div>
-        </div>
-    )
+ <main className={clsx('flex-1 overflow-auto transition-all duration-300', sidebarOpen ? 'lg:ml-64' : 'lg:ml-20')}>
+ <div className="w-full max-w-[1560px] mx-auto px-4 py-4 md:px-6 md:py-5">
+ {children}
+ </div>
+ </main>
+ </div>
+ </div>
+ )
 }

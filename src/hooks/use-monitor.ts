@@ -3,6 +3,7 @@ import { sendTelegramNotification } from '@/utils/telegram'
 import { fetchTrendingStocks, fetchOrderbook, fetchMarketDetector } from '@/services/api'
 import { useAlertStore } from '@/stores/alert-store'
 import { useAlertDataStore } from '@/stores/alert-data-store'
+import { useToastStore } from '@/stores/toast-store'
 
 const PRICE_ALERT_COOLDOWN_MS = 60 * 60 * 1000 // 60 menit
 const VOLUME_ALERT_COOLDOWN_MS = 45 * 60 * 1000 // 45 menit
@@ -271,6 +272,16 @@ export function useMonitorSignificantChanges(options: UseMonitorOptions = {}) {
 
                     if (generatedAlerts.length > 0) {
                         cycleGeneratedAlerts.push(...generatedAlerts)
+                        
+                        // Tampilkan toast ke layar secara live
+                        generatedAlerts.forEach((alert) => {
+                            useToastStore.getState().addToast({
+                                title: `${alert.title} - ${symbol}`,
+                                message: alert.message,
+                                type: 'alert',
+                                duration: 6000
+                            })
+                        })
                     }
 
                     if (telegramMessages.length > 0) {

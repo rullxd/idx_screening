@@ -8,6 +8,7 @@ import {
     ScreenerFilters,
     Broker,
 } from '@/types'
+import { BrokerActivitySide, normalizeBrokerActivityAmounts } from '@/utils/broker-activity'
 
 /**
  * All API endpoint functions
@@ -149,6 +150,33 @@ export async function fetchBrokerActivity(params?: {
 // ============= SCREENING ENDPOINTS =============
 
 // Transform broker activity data into stock screening format
+function summarizeBrokerActivity(entries: any[], side: BrokerActivitySide) {
+    let value = 0
+    let lot = 0
+    let freq = 0
+    let totalWeight = 0
+    let weightedPrice = 0
+
+    entries.forEach((entry) => {
+        const amounts = normalizeBrokerActivityAmounts(entry, side)
+        value += amounts.value
+        lot += amounts.lot
+        freq += amounts.freq
+
+        if (amounts.avgPrice > 0 && amounts.value > 0) {
+            totalWeight += amounts.value
+            weightedPrice += amounts.avgPrice * amounts.value
+        }
+    })
+
+    return {
+        value,
+        lot,
+        freq,
+        avgPrice: totalWeight > 0 ? weightedPrice / totalWeight : 0,
+    }
+}
+
 function transformBrokerActivityToScreening(rawData: any): any[] {
     try {
         if (!rawData) {
@@ -203,24 +231,18 @@ function transformBrokerActivityToScreening(rawData: any): any[] {
         })
 
         const results = Array.from(stockMap.entries()).map(([code, data]) => {
-            const buyValue = data.buy.reduce((s: number, b: any) => s + (b.value || 0), 0)
-            const sellValue = data.sell.reduce((s: number, b: any) => s + (b.value || 0), 0)
+            const buySummary = summarizeBrokerActivity(data.buy, 'buy')
+            const sellSummary = summarizeBrokerActivity(data.sell, 'sell')
+            const buyValue = buySummary.value
+            const sellValue = sellSummary.value
             const netValue = buyValue - sellValue
 
-            const buyLot = data.buy.reduce((s: number, b: any) => s + (b.lot || 0), 0)
-            const sellLot = data.sell.reduce((s: number, b: any) => s + (b.lot || 0), 0)
-
-            const buyFreq = data.buy.reduce((s: number, b: any) => s + (b.freq || 0), 0)
-            const sellFreq = data.sell.reduce((s: number, b: any) => s + (b.freq || 0), 0)
-
-            const buyPrice =
-                data.buy.length > 0
-                    ? data.buy.reduce((s: number, b: any) => s + (b.avg_price || 0), 0) / data.buy.length
-                    : 0
-            const sellPrice =
-                data.sell.length > 0
-                    ? data.sell.reduce((s: number, b: any) => s + (b.avg_price || 0), 0) / data.sell.length
-                    : 0
+            const buyLot = buySummary.lot
+            const sellLot = sellSummary.lot
+            const buyFreq = buySummary.freq
+            const sellFreq = sellSummary.freq
+            const buyPrice = buySummary.avgPrice
+            const sellPrice = sellSummary.avgPrice
 
             let accdist = 'Neutral'
             let score = 5
@@ -300,6 +322,26 @@ export async function fetchOrderbook(symbol: string): Promise<any> {
     })
 }
 
+export async function fetchRunningTrade(params: {
+    symbol: string
+    date: string
+    limit?: number
+    maxPages?: number
+    tradeNumber?: string
+}): Promise<any> {
+    const symbol = params.symbol.toUpperCase()
+    return apiClient.get('/running-trade', {
+        params: {
+            symbol,
+            date: params.date,
+            limit: params.limit ?? 80,
+            max_pages: params.maxPages ?? 8,
+            ...(params.tradeNumber ? { trade_number: params.tradeNumber } : {}),
+        },
+        cancelKey: `running-trade-${symbol}-${params.date}`,
+    })
+}
+
 export async function fetchIHSGChart(params?: {
     period?: string
     timeframe?: string
@@ -347,12 +389,20 @@ export async function fetchStockChartbit(
     stockCode: string,
     params?: { timeframe?: string; period?: string; from?: string; to?: string }
 ): Promise<StockChartResponse> {
-    const from = params?.from || '2026-05-22'
-    const to = params?.to || '2023-05-22'
+    // Let the backend compute date ranges from timeframe if from/to not provided
+    const timeframe = params?.timeframe || params?.period || '3m'
+    const queryParams: Record<string, string> = {
+        symbol: stockCode.toUpperCase(),
+        timeframe,
+    }
+
+    // Only pass explicit from/to if provided by caller
+    if (params?.from) queryParams.from = params.from
+    if (params?.to) queryParams.to = params.to
 
     return apiClient.get('/stock-chartbit', {
-        params: { symbol: stockCode.toUpperCase(), from, to },
-        cancelKey: `stock-chartbit-${stockCode}-${from}-${to}`,
+        params: queryParams,
+        cancelKey: `stock-chartbit-${stockCode}-${timeframe}`,
     })
 }
 

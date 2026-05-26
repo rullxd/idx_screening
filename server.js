@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -15,6 +16,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAX_CACHE_SIZE = 200; // LRU cache limit
 const responseCache = new Map();
 const streamManagers = new Map();
+
+// === OPSI 1: Request Coalescing ===
+// Prevents duplicate upstream calls when multiple clients hit the same URL
+// while cache is expired. Piggyback on the same in-flight Promise.
+const pendingRequests = new Map();
 
 // Simple rate limiter (per IP). Raised to support scanner + dashboard bursts.
 const rateLimitMap = new Map();
@@ -42,7 +48,7 @@ function rateLimiter(req, res, next) {
 }
 
 // Clean up expired rate limit entries every 5 minutes
-setInterval(() => {
+const rateLimitCleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [ip, entry] of rateLimitMap) {
         if (now - entry.start > RATE_LIMIT_WINDOW) {
@@ -50,6 +56,23 @@ setInterval(() => {
         }
     }
 }, 5 * 60 * 1000);
+
+// === OPSI 3: Cache Expiry Sweep ===
+// Periodically remove expired cache entries to free memory
+const cacheCleanupTimer = setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [key, entry] of responseCache) {
+        if (entry.expiresAt <= now) {
+            responseCache.delete(key);
+            cleaned++;
+        }
+    }
+    if (cleaned > 0) {
+        console.log(`🧹 Cache sweep: removed ${cleaned} expired entries (${responseCache.size} remaining)`);
+    }
+}, 2 * 60 * 1000); // every 2 minutes
+
 const CACHE_TTL = {
     brokerActivity: 60 * 1000,
     marketDetector: 60 * 1000,
@@ -59,6 +82,7 @@ const CACHE_TTL = {
     stockChart: 45 * 1000,
     chartbit: 45 * 1000,
     ihsgChart: 5 * 1000,  // Reduced from 30s to 5s for faster timeframe switching
+    runningTrade: 15 * 1000,
     brokerRanking: 5 * 60 * 1000
 };
 
@@ -183,6 +207,7 @@ function attachClientToStream(res, key, intervalMs, fetcher, initialEventName = 
         .catch(() => { });
 }
 
+// === OPSI 1: Request Coalescing integrated into fetchJsonWithCache ===
 async function fetchJsonWithCache({ cacheKey, ttlMs, url, headers, logLabel }) {
     const now = Date.now();
     const cached = responseCache.get(cacheKey);
@@ -193,27 +218,47 @@ async function fetchJsonWithCache({ cacheKey, ttlMs, url, headers, logLabel }) {
 
     if (cached) responseCache.delete(cacheKey);
 
+    // Request Coalescing: if same URL is already being fetched, reuse the promise
+    if (pendingRequests.has(cacheKey)) {
+        console.log(`⏳ Coalescing: ${logLabel} (piggyback on in-flight request)`);
+        const data = await pendingRequests.get(cacheKey);
+        return { data, cacheHit: false };
+    }
+
     console.log(`📡 Cache miss: ${logLabel}`);
-    const response = await fetch(url, { method: 'GET', headers });
-    if (!response.ok) {
-        throw new Error(`API returned HTTP ${response.status}`);
+
+    const fetchPromise = (async () => {
+        const response = await fetch(url, { method: 'GET', headers });
+        if (!response.ok) {
+            throw new Error(`API returned HTTP ${response.status}`);
+        }
+        return response.json();
+    })();
+
+    pendingRequests.set(cacheKey, fetchPromise);
+
+    try {
+        const data = await fetchPromise;
+
+        // LRU eviction: remove oldest entries when cache exceeds max size
+        if (responseCache.size >= MAX_CACHE_SIZE) {
+            const oldestKey = responseCache.keys().next().value;
+            responseCache.delete(oldestKey);
+        }
+
+        responseCache.set(cacheKey, {
+            data,
+            expiresAt: now + ttlMs
+        });
+
+        return { data, cacheHit: false };
+    } finally {
+        pendingRequests.delete(cacheKey);
     }
-
-    const data = await response.json();
-
-    // LRU eviction: remove oldest entries when cache exceeds max size
-    if (responseCache.size >= MAX_CACHE_SIZE) {
-        const oldestKey = responseCache.keys().next().value;
-        responseCache.delete(oldestKey);
-    }
-
-    responseCache.set(cacheKey, {
-        data,
-        expiresAt: now + ttlMs
-    });
-
-    return { data, cacheHit: false };
 }
+
+// === OPSI 4: Compression Middleware ===
+app.use(compression());
 
 // Middleware
 app.use(cors());
@@ -361,6 +406,90 @@ app.get('/api/orderbook', async (req, res) => {
     }
 });
 
+// API Proxy Endpoint — Running Trade bertahap memakai trade_number terakhir sebagai cursor.
+app.get('/api/running-trade', async (req, res) => {
+    try {
+        const symbol = String(req.query.symbol || 'BBRI').toUpperCase();
+        const date = String(req.query.date || formatDateYYYYMMDD(new Date()));
+        const limit = String(req.query.limit || 80);
+        const maxPages = Math.max(1, Math.min(Number(req.query.max_pages || 8), 30));
+        const stopTime = String(req.query.stop_time || '16:08:07');
+        const orderBy = String(req.query.order_by || 'RUNNING_TRADE_ORDER_BY_TIME');
+        const sort = String(req.query.sort || 'DESC');
+        const requestedTradeNumber = req.query.trade_number ? String(req.query.trade_number) : '';
+        const allTrades = [];
+        let nextTradeNumber = requestedTradeNumber;
+        let isOpenMarket = false;
+        let isShowBs = true;
+        let breakTimeLeftSeconds = 0;
+        let reachedStopTime = false;
+
+        for (let page = 0; page < maxPages; page++) {
+            const queryParams = new URLSearchParams({
+                date,
+                order_by: orderBy,
+            });
+            queryParams.append('symbols[]', symbol);
+
+            if (nextTradeNumber) {
+                queryParams.append('trade_number', nextTradeNumber);
+            } else {
+                queryParams.append('sort', sort);
+                queryParams.append('limit', limit);
+            }
+
+            const apiUrl = `https://exodus.stockbit.com/order-trade/running-trade?${queryParams}`;
+            const { data } = await fetchJsonWithCache({
+                cacheKey: apiUrl,
+                ttlMs: CACHE_TTL.runningTrade,
+                url: apiUrl,
+                logLabel: `running trade ${symbol} ${date} page ${page + 1}`,
+                headers: {
+                    'Authorization': `Bearer ${TOKEN}`,
+                    'Accept': 'application/json, text/plain, */*',
+                    'Origin': 'https://stockbit.com',
+                    'Referer': 'https://stockbit.com/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+
+            const payload = data?.data || {};
+            const trades = Array.isArray(payload.running_trade) ? payload.running_trade : [];
+            isOpenMarket = Boolean(payload.is_open_market);
+            isShowBs = payload.is_show_bs !== false;
+            breakTimeLeftSeconds = Number(payload.break_time_left_seconds || 0);
+
+            if (trades.length === 0) break;
+
+            allTrades.push(...trades);
+            const lastTrade = trades[trades.length - 1];
+            nextTradeNumber = String(lastTrade?.trade_number || '');
+            reachedStopTime = Boolean(lastTrade?.time && String(lastTrade.time) >= stopTime);
+
+            if (!nextTradeNumber || reachedStopTime) break;
+        }
+
+        res.json({
+            message: 'Successfully loaded running trade data',
+            data: {
+                is_open_market: isOpenMarket,
+                running_trade: allTrades,
+                is_show_bs: isShowBs,
+                break_time_left_seconds: breakTimeLeftSeconds,
+                date,
+                next_trade_number: nextTradeNumber,
+                reached_stop_time: reachedStopTime,
+            }
+        });
+    } catch (error) {
+        console.error('❌ Running Trade Proxy Error:', error.message);
+        res.status(500).json({
+            error: error.message,
+            message: 'Failed to fetch running trade data'
+        });
+    }
+});
+
 // API Proxy Endpoint — IHSG Orderbook
 app.get('/api/ihsg', async (req, res) => {
     try {
@@ -446,6 +575,7 @@ app.get('/api/stock-chartbit', async (req, res) => {
         let url = chartbitUrl;
 
         let result;
+        let useFallback = false;
         try {
             result = await fetchJsonWithCache({
                 cacheKey: chartbitUrl,
@@ -458,8 +588,18 @@ app.get('/api/stock-chartbit', async (req, res) => {
                     'Accept': 'application/json'
                 }
             });
+            
+            // Trigger fallback if the chartbit data is empty
+            if (!result?.data?.chartbit || result.data.chartbit.length === 0) {
+                console.warn(`⚠️ Chartbit returned empty data for ${stockCode}; falling back to charts`);
+                useFallback = true;
+            }
         } catch (chartbitError) {
             console.warn(`⚠️ Chartbit failed for ${stockCode}; falling back to charts: ${chartbitError.message}`);
+            useFallback = true;
+        }
+
+        if (useFallback) {
             url = fallbackUrl;
             result = await fetchJsonWithCache({
                 cacheKey: fallbackUrl,
@@ -484,7 +624,7 @@ app.get('/api/stock-chartbit', async (req, res) => {
     }
 });
 
-// API Proxy Endpoint — Stockbit Chartbit OHLC candles
+// API Proxy Endpoint — Stockbit Chartbit OHLC candles (raw)
 app.get('/api/stock-chartbit-raw', async (req, res) => {
     try {
         const { symbol = 'BBCA', timeframe = 'today', from, to } = req.query;
@@ -509,6 +649,92 @@ app.get('/api/stock-chartbit-raw', async (req, res) => {
         res.json(data);
     } catch (error) {
         console.error('❌ Stock Chartbit Proxy Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// === OPSI 2: Batch Chartbit Endpoint ===
+// Accepts multiple symbols in one request, returns all chart data at once.
+// Usage: GET /api/batch-chartbit?symbols=BBCA,BBRI,TLKM&timeframe=3m
+app.get('/api/batch-chartbit', async (req, res) => {
+    try {
+        const { symbols = '', timeframe = '3m', from, to } = req.query;
+        const symbolList = String(symbols)
+            .split(',')
+            .map(s => s.trim().toUpperCase())
+            .filter(Boolean);
+
+        if (symbolList.length === 0) {
+            return res.status(400).json({ error: 'No symbols provided. Use ?symbols=BBCA,BBRI' });
+        }
+
+        // Cap at 50 symbols per batch to prevent abuse
+        const cappedSymbols = symbolList.slice(0, 50);
+        const defaultRange = getChartbitDateRange(timeframe);
+        const range = {
+            from: from || defaultRange.from,
+            to: to || defaultRange.to,
+        };
+
+        const results = await Promise.allSettled(
+            cappedSymbols.map(async (stockCode) => {
+                const chartbitUrl = `https://exodus.stockbit.com/chartbit/${encodeURIComponent(stockCode)}/price/daily?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`;
+                const fallbackUrl = `https://exodus.stockbit.com/charts/${encodeURIComponent(stockCode)}/daily?timeframe=${encodeURIComponent(timeframe)}`;
+
+                try {
+                    const { data } = await fetchJsonWithCache({
+                        cacheKey: chartbitUrl,
+                        ttlMs: CACHE_TTL.chartbit,
+                        url: chartbitUrl,
+                        logLabel: `batch chartbit ${stockCode}`,
+                        headers: {
+                            'Authorization': `Bearer ${TOKEN}`,
+                            'User-Agent': 'Mozilla/5.0',
+                            'Accept': 'application/json'
+                        }
+                    });
+                    return { symbol: stockCode, data, source: 'chartbit' };
+                } catch {
+                    // Fallback to charts endpoint
+                    const { data } = await fetchJsonWithCache({
+                        cacheKey: fallbackUrl,
+                        ttlMs: CACHE_TTL.stockChart,
+                        url: fallbackUrl,
+                        logLabel: `batch chartbit fallback ${stockCode}`,
+                        headers: {
+                            'Authorization': `Bearer ${TOKEN}`,
+                            'User-Agent': 'Mozilla/5.0',
+                            'Accept': 'application/json'
+                        }
+                    });
+                    return { symbol: stockCode, data, source: 'charts-fallback' };
+                }
+            })
+        );
+
+        const response = {};
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                response[result.value.symbol] = {
+                    data: result.value.data,
+                    source: result.value.source,
+                    status: 'ok'
+                };
+            } else {
+                // Extract symbol from error — fallback
+                response['unknown'] = {
+                    data: null,
+                    source: null,
+                    status: 'error',
+                    error: result.reason?.message || 'Unknown error'
+                };
+            }
+        }
+
+        console.log(`✅ Batch chartbit: ${cappedSymbols.length} symbols processed`);
+        res.json({ data: response, count: cappedSymbols.length });
+    } catch (error) {
+        console.error('❌ Batch Chartbit Proxy Error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -541,6 +767,8 @@ app.get('/api/ihsg-chart', async (req, res) => {
     }
 });
 
+// === OPSI 6: Deduplicate SSE Logic ===
+// Refactored to use attachClientToStream instead of manual reimplementation
 app.get('/api/stream/ihsg-chart', async (req, res) => {
     const { period, timeframe } = req.query;
     const selectedTimeframe = getIHSGChartTimeframe(timeframe, period);
@@ -553,6 +781,15 @@ app.get('/api/stream/ihsg-chart', async (req, res) => {
     res.flushHeaders?.();
 
     res.write(': connected\n\n');
+
+    const heartbeat = setInterval(() => {
+        res.write(': ping\n\n');
+    }, 30000);
+
+    // Clean up heartbeat when client disconnects
+    res.on('close', () => {
+        clearInterval(heartbeat);
+    });
 
     const managerKey = `ihsg-chart:${selectedTimeframe}`;
     const fetcher = async () => {
@@ -567,37 +804,11 @@ app.get('/api/stream/ihsg-chart', async (req, res) => {
                 'Accept': 'application/json'
             }
         });
-
         return data;
     };
 
-    const manager = getOrCreateStreamManager(managerKey, 10000, fetcher);
-    manager.clients.add(res);
-
-    const sendInitial = async () => {
-        try {
-            const payload = await fetcher();
-            manager.lastPayload = JSON.stringify(payload);
-            sendSSE(res, 'snapshot', payload);
-        } catch (error) {
-            sendSSE(res, 'error', { message: error.message });
-        }
-    };
-
-    const heartbeat = setInterval(() => {
-        res.write(': ping\n\n');
-    }, 30000);
-
-    sendInitial();
-
-    req.on('close', () => {
-        clearInterval(heartbeat);
-        manager.clients.delete(res);
-        if (manager.clients.size === 0) {
-            clearInterval(manager.timer);
-            streamManagers.delete(managerKey);
-        }
-    });
+    // Use the shared attachClientToStream helper
+    attachClientToStream(res, managerKey, 10000, fetcher, 'snapshot');
 });
 
 // API Proxy Endpoint — Broker Ranking
@@ -651,7 +862,16 @@ app.get('/api/broker-ranking', async (req, res) => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Backend is running' });
+    res.json({
+        status: 'ok',
+        message: 'Backend is running',
+        cache: {
+            entries: responseCache.size,
+            maxSize: MAX_CACHE_SIZE,
+            pendingRequests: pendingRequests.size,
+        },
+        streams: streamManagers.size,
+    });
 });
 
 // Keep unknown API routes JSON-only; otherwise Express static fallback returns index.html.
@@ -664,7 +884,46 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
     console.log(`📊 Open http://localhost:${PORT} in your browser`);
 });
+
+// === OPSI 7: Graceful Shutdown ===
+function gracefulShutdown(signal) {
+    console.log(`\n🛑 ${signal} received. Shutting down gracefully...`);
+
+    // Clear all stream manager intervals
+    for (const [key, manager] of streamManagers) {
+        clearInterval(manager.timer);
+        for (const client of manager.clients) {
+            sendSSE(client, 'shutdown', { message: 'Server shutting down' });
+            client.end();
+        }
+        streamManagers.delete(key);
+    }
+
+    // Clear cleanup timers
+    clearInterval(rateLimitCleanupTimer);
+    clearInterval(cacheCleanupTimer);
+
+    // Clear caches
+    responseCache.clear();
+    pendingRequests.clear();
+    rateLimitMap.clear();
+
+    // Close HTTP server
+    server.close(() => {
+        console.log('✅ Server closed. Goodbye!');
+        process.exit(0);
+    });
+
+    // Force exit after 5 seconds if graceful shutdown fails
+    setTimeout(() => {
+        console.error('⚠️ Forced exit after timeout');
+        process.exit(1);
+    }, 5000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

@@ -25,20 +25,51 @@ function mapInvestorType(type?: string): string {
     return 'Lokal'
 }
 
+export type BrokerActivitySide = 'buy' | 'sell'
+
+function pickPositiveNumber(entry: any, keys: string[]): number {
+    for (const key of keys) {
+        const value = Number(entry?.[key] ?? 0)
+        if (Number.isFinite(value) && value !== 0) return Math.abs(value)
+    }
+    return 0
+}
+
+export function normalizeBrokerActivityAmounts(entry: any, side?: BrokerActivitySide) {
+    const valueKeys = side === 'buy'
+        ? ['value', 'bval', 'bvalv', 'sval', 'svalv']
+        : side === 'sell'
+            ? ['value', 'sval', 'svalv', 'bval', 'bvalv']
+            : ['value', 'bval', 'bvalv', 'sval', 'svalv']
+    const lotKeys = side === 'buy'
+        ? ['lot', 'blot', 'blotv', 'slot', 'slotv']
+        : side === 'sell'
+            ? ['lot', 'slot', 'slotv', 'blot', 'blotv']
+            : ['lot', 'blot', 'blotv', 'slot', 'slotv']
+    const avgPriceKeys = side === 'buy'
+        ? ['avg_price', 'netbs_buy_avg_price', 'netbs_sell_avg_price']
+        : side === 'sell'
+            ? ['avg_price', 'netbs_sell_avg_price', 'netbs_buy_avg_price']
+            : ['avg_price', 'netbs_buy_avg_price', 'netbs_sell_avg_price']
+
+    return {
+        value: pickPositiveNumber(entry, valueKeys),
+        lot: pickPositiveNumber(entry, lotKeys),
+        avgPrice: pickPositiveNumber(entry, avgPriceKeys),
+        freq: Number(entry?.freq ?? 0),
+    }
+}
+
 function normalizeRow(entry: any): StockTransaction {
-    const value = Math.abs(Number(entry.value ?? entry.bval ?? entry.sval ?? 0))
-    const lot = Math.abs(Number(entry.lot ?? entry.blot ?? entry.slot ?? 0))
-    const avgPrice = Math.abs(
-        Number(entry.avg_price ?? entry.netbs_buy_avg_price ?? entry.netbs_sell_avg_price ?? 0)
-    )
+    const amounts = normalizeBrokerActivityAmounts(entry)
 
     return {
         stockCode: (entry.stock_code || entry.netbs_stock_code || '').toUpperCase(),
         brokerCode: (entry.broker_code || entry.netbs_broker_code || '').toUpperCase(),
-        value,
-        lot,
-        avgPrice,
-        freq: Number(entry.freq ?? 0),
+        value: amounts.value,
+        lot: amounts.lot,
+        avgPrice: amounts.avgPrice,
+        freq: amounts.freq,
         date: entry.date || entry.netbs_date,
         investorType: mapInvestorType(entry.type),
         iconUrl: entry.company_detail?.icon_url,
@@ -139,17 +170,14 @@ export interface BandarmologyInsight {
 }
 
 function normalizeDetectorBroker(entry: any, side: 'buy' | 'sell'): MarketDetectorBroker {
-    const isBuy = side === 'buy'
+    const amounts = normalizeBrokerActivityAmounts(entry, side)
+
     return {
         code: (entry.netbs_broker_code || entry.broker_code || '').toUpperCase(),
-        value: Math.abs(Number(isBuy ? entry.bval ?? entry.bvalv : entry.sval ?? entry.svalv ?? 0)),
-        lot: Math.abs(Number(isBuy ? entry.blot ?? entry.blotv : entry.slot ?? entry.slotv ?? 0)),
-        avgPrice: Math.abs(
-            Number(
-                isBuy ? entry.netbs_buy_avg_price : entry.netbs_sell_avg_price ?? entry.avg_price ?? 0
-            )
-        ),
-        freq: Number(entry.freq ?? 0),
+        value: amounts.value,
+        lot: amounts.lot,
+        avgPrice: amounts.avgPrice,
+        freq: amounts.freq,
         investorType: mapInvestorType(entry.type),
     }
 }

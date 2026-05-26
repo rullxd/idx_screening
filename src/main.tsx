@@ -8,22 +8,22 @@ import './styles/index.css'
 
 // Setup React Query
 const queryClient = new QueryClient({
-    defaultOptions: {
-        queries: {
-            retry: 1,
-            refetchOnWindowFocus: false,
-        },
-    },
+ defaultOptions: {
+ queries: {
+ retry: 1,
+ refetchOnWindowFocus: false,
+ },
+ },
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-        <QueryClientProvider client={queryClient}>
-            <BrowserRouter>
-                <ErrorBoundary>
-                    <App />
-                </ErrorBoundary>
-            </BrowserRouter>
-        </QueryClientProvider>
-    </React.StrictMode>
+ <React.StrictMode>
+ <QueryClientProvider client={queryClient}>
+ <BrowserRouter>
+ <ErrorBoundary>
+ <App />
+ </ErrorBoundary>
+ </BrowserRouter>
+ </QueryClientProvider>
+ </React.StrictMode>
 )

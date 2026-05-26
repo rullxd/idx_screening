@@ -43,6 +43,61 @@ export default {
                 'DEFAULT': 'var(--color-border)',
                 'secondary': 'var(--color-border-secondary)',
             },
+            animation: {
+                'fade-in': 'fadeIn 0.5s ease-out forwards',
+                'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+                'fade-in-down': 'fadeInDown 0.4s ease-out forwards',
+                'slide-in-left': 'slideInLeft 0.4s ease-out forwards',
+                'slide-in-right': 'slideInRight 0.4s ease-out forwards',
+                'scale-in': 'scaleIn 0.3s ease-out forwards',
+                'shimmer': 'shimmer 2s infinite linear',
+                'glow-pulse': 'glowPulse 2s ease-in-out infinite',
+                'float': 'float 3s ease-in-out infinite',
+                'number-pop': 'numberPop 0.3s ease-out',
+            },
+            keyframes: {
+                fadeIn: {
+                    '0%': { opacity: '0' },
+                    '100%': { opacity: '1' },
+                },
+                fadeInUp: {
+                    '0%': { opacity: '0', transform: 'translateY(20px)' },
+                    '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
+                fadeInDown: {
+                    '0%': { opacity: '0', transform: 'translateY(-10px)' },
+                    '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
+                slideInLeft: {
+                    '0%': { opacity: '0', transform: 'translateX(-20px)' },
+                    '100%': { opacity: '1', transform: 'translateX(0)' },
+                },
+                slideInRight: {
+                    '0%': { opacity: '0', transform: 'translateX(20px)' },
+                    '100%': { opacity: '1', transform: 'translateX(0)' },
+                },
+                scaleIn: {
+                    '0%': { opacity: '0', transform: 'scale(0.95)' },
+                    '100%': { opacity: '1', transform: 'scale(1)' },
+                },
+                shimmer: {
+                    '0%': { backgroundPosition: '-200% 0' },
+                    '100%': { backgroundPosition: '200% 0' },
+                },
+                glowPulse: {
+                    '0%, 100%': { boxShadow: '0 0 5px rgba(0, 229, 160, 0.1)' },
+                    '50%': { boxShadow: '0 0 20px rgba(0, 229, 160, 0.15)' },
+                },
+                float: {
+                    '0%, 100%': { transform: 'translateY(0px)' },
+                    '50%': { transform: 'translateY(-5px)' },
+                },
+                numberPop: {
+                    '0%': { transform: 'scale(1)' },
+                    '50%': { transform: 'scale(1.05)' },
+                    '100%': { transform: 'scale(1)' },
+                },
+            },
         },
     },
     plugins: [],

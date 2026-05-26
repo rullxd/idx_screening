@@ -41,6 +41,14 @@ export interface MataDewaAnalysis {
     footprintZScore: number
     crossingShare: number
     fakeForeignScore: number
+    bandarCostGap: number
+    accumulationQualityScore: number
+    distributionRiskScore: number
+    fakeRetailScore: number
+    absorptionStrength: number
+    markupReadinessScore: number
+    shakeoutScore: number
+    smartMoneyDivergenceScore: number
     avgCostPositions: BrokerCostPosition[]
     topAccumulators: BrokerCostPosition[]
     signals: MataDewaSignal[]
@@ -183,6 +191,48 @@ function detectFakeForeign(snapshots: MataDewaDailySnapshot[]): number {
     return safeDiv(suspiciousValue, foreignValue)
 }
 
+function retailShare(items: MarketDetectorBroker[]): number {
+    const total = sumValue(items)
+    if (total <= 0) return 0
+    const retail = items
+        .filter((item) => getBrokerTierInfo(item.code).tier === 1)
+        .reduce((sum, item) => sum + item.value, 0)
+    return retail / total
+}
+
+function fakeRetailScore(items: MarketDetectorBroker[]): number {
+    const retail = items.filter((item) => getBrokerTierInfo(item.code).tier === 1)
+    const total = retail.reduce((sum, item) => sum + item.value, 0)
+    if (total <= 0) return 0
+
+    const suspicious = retail.reduce((sum, item) => {
+        const avgTicket = safeDiv(item.value, item.freq)
+        return avgTicket >= 50_000_000 ? sum + item.value : sum
+    }, 0)
+
+    return safeDiv(suspicious, total)
+}
+
+function latestSmartRetailFlow(detector?: ParsedMarketDetector) {
+    const flow = { smartBuy: 0, smartSell: 0, retailBuy: 0, retailSell: 0 }
+    if (!detector) return flow
+
+    detector.buyers.forEach((item) => {
+        if (getBrokerTierInfo(item.code).tier === 1) flow.retailBuy += item.value
+        else flow.smartBuy += item.value
+    })
+    detector.sellers.forEach((item) => {
+        if (getBrokerTierInfo(item.code).tier === 1) flow.retailSell += item.value
+        else flow.smartSell += item.value
+    })
+
+    return flow
+}
+
+function clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value))
+}
+
 function buildSignals(analysis: Omit<MataDewaAnalysis, 'signals' | 'verdict' | 'verdictLabel'>): MataDewaSignal[] {
     const signals: MataDewaSignal[] = []
 
@@ -213,6 +263,78 @@ function buildSignals(analysis: Omit<MataDewaAnalysis, 'signals' | 'verdict' | '
             tone: 'warning',
             value: `${Math.round(analysis.crossingShare * 100)}%`,
             description: 'Broker yang sama muncul di buy dan sell dengan nilai mirip. Fokus ke net flow, jangan gross volume.',
+        })
+    }
+
+    if (analysis.accumulationQualityScore >= 0.7) {
+        signals.push({
+            key: 'accumulation-quality',
+            label: 'Akumulasi Berkualitas',
+            tone: 'bullish',
+            value: `${Math.round(analysis.accumulationQualityScore * 100)}`,
+            description: 'Net smart money, konsentrasi buyer, seller retail, persistensi, dan AVG cost mendukung pola akumulasi valid.',
+        })
+    }
+
+    if (analysis.distributionRiskScore >= 0.65) {
+        signals.push({
+            key: 'distribution-risk',
+            label: 'Distribution Risk',
+            tone: 'bearish',
+            value: `${Math.round(analysis.distributionRiskScore * 100)}`,
+            description: 'Seller terkonsentrasi, smart money cenderung keluar, retail menampung, atau harga sudah jauh di atas AVG bandar.',
+        })
+    }
+
+    if (analysis.fakeRetailScore >= 0.35) {
+        signals.push({
+            key: 'fake-retail',
+            label: 'Fake Retail',
+            tone: 'warning',
+            value: `${Math.round(analysis.fakeRetailScore * 100)}%`,
+            description: 'Broker ritel punya value per transaksi terlalu besar. Ada indikasi akun besar memakai topeng retail.',
+        })
+    }
+
+    if (analysis.absorptionStrength >= 1.15 && analysis.buyerConcentration >= 0.35) {
+        signals.push({
+            key: 'absorption',
+            label: 'Absorption Strength',
+            tone: 'bullish',
+            value: `${analysis.absorptionStrength.toFixed(2)}x`,
+            description: 'Tekanan jual relatif terserap oleh buyer besar. Ini sering muncul sebelum supply mengering.',
+        })
+    }
+
+    if (analysis.markupReadinessScore >= 0.68) {
+        signals.push({
+            key: 'markup-readiness',
+            label: 'Ready to Mark Up',
+            tone: 'bullish',
+            value: `${Math.round(analysis.markupReadinessScore * 100)}`,
+            description: 'Akumulasi senyap, persistensi buyer, konsentrasi, dan crossing rendah mendukung fase siap mark-up.',
+        })
+    }
+
+    if (analysis.shakeoutScore >= 0.6) {
+        signals.push({
+            key: 'shakeout',
+            label: 'Potensi Shakeout',
+            tone: 'warning',
+            value: `${Math.round(analysis.shakeoutScore * 100)}`,
+            description: 'Harga dekat/di bawah AVG bandar, seller retail dominan, dan buyer kuat masih menyerap. Bedakan dari distribusi institusi.',
+        })
+    }
+
+    if (Math.abs(analysis.smartMoneyDivergenceScore) >= 0.55) {
+        signals.push({
+            key: 'smart-money-divergence',
+            label: analysis.smartMoneyDivergenceScore > 0 ? 'Bullish Divergence' : 'Bearish Divergence',
+            tone: analysis.smartMoneyDivergenceScore > 0 ? 'bullish' : 'bearish',
+            value: `${Math.round(analysis.smartMoneyDivergenceScore * 100)}`,
+            description: analysis.smartMoneyDivergenceScore > 0
+                ? 'Harga berada di bawah AVG utama tetapi smart money masih net buy. Ini anomali bullish yang perlu dipantau.'
+                : 'Harga sudah premium terhadap AVG utama tetapi smart money net sell. Ini anomali bearish/distribusi.',
         })
     }
 
@@ -249,6 +371,147 @@ function buildSignals(analysis: Omit<MataDewaAnalysis, 'signals' | 'verdict' | '
     return signals
 }
 
+/* ─── XL / XC Net Sell Anomaly Detector ─── */
+
+export interface RetailSellDaySnapshot {
+    date: string
+    xlNetValue: number
+    xcNetValue: number
+    combinedNetValue: number
+    /** price reference on that day (avg from broksum) */
+    price: number
+}
+
+export interface RetailSellAnomalyResult {
+    symbol: string
+    days: RetailSellDaySnapshot[]
+    /** how many days both XL+XC were net sell */
+    netSellDays: number
+    totalDays: number
+    /** average forward return (%) when XL+XC net sell together */
+    avgReturnAfterSell: number
+    /** win rate – how often price went up after XL+XC net sell */
+    winRate: number
+    /** total XL net value across period */
+    xlTotalNet: number
+    /** total XC net value across period */
+    xcTotalNet: number
+    /** combined XL+XC net value across period */
+    combinedTotalNet: number
+    /** overall price change from first to last snapshot */
+    overallPriceChange: number
+    /** anomaly verdict */
+    verdict: 'BULLISH_ANOMALY' | 'BEARISH_ANOMALY' | 'NEUTRAL'
+    verdictLabel: string
+    insights: string[]
+}
+
+export function analyzeRetailSellAnomaly(
+    symbol: string,
+    rawSnapshots: Array<{ date: string; raw: unknown }>
+): RetailSellAnomalyResult {
+    const snapshots = rawSnapshots
+        .map((s) => ({ date: s.date, detector: parseMarketDetector(s.raw) }))
+        .filter((s) => s.detector.buyers.length > 0 || s.detector.sellers.length > 0)
+
+    const days: RetailSellDaySnapshot[] = snapshots.map(({ date, detector }) => {
+        const xlBuy = detector.buyers.filter((b) => b.code === 'XL').reduce((s, i) => s + i.value, 0)
+        const xlSell = detector.sellers.filter((b) => b.code === 'XL').reduce((s, i) => s + i.value, 0)
+        const xcBuy = detector.buyers.filter((b) => b.code === 'XC').reduce((s, i) => s + i.value, 0)
+        const xcSell = detector.sellers.filter((b) => b.code === 'XC').reduce((s, i) => s + i.value, 0)
+        const xlNet = xlBuy - xlSell
+        const xcNet = xcBuy - xcSell
+
+        const prices = [...detector.buyers, ...detector.sellers]
+            .map((i) => i.avgPrice)
+            .filter((p) => p > 0)
+        const avgPrice = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0
+
+        return {
+            date,
+            xlNetValue: xlNet,
+            xcNetValue: xcNet,
+            combinedNetValue: xlNet + xcNet,
+            price: detector.summary?.average || avgPrice,
+        }
+    })
+
+    const netSellDays = days.filter((d) => d.combinedNetValue < 0).length
+    const xlTotal = days.reduce((s, d) => s + d.xlNetValue, 0)
+    const xcTotal = days.reduce((s, d) => s + d.xcNetValue, 0)
+    const combinedTotal = xlTotal + xcTotal
+
+    // Calculate forward returns: after each net sell day, what happened to price next?
+    let wins = 0
+    let totalReturn = 0
+    let sellEvents = 0
+
+    for (let i = 0; i < days.length - 1; i++) {
+        if (days[i].combinedNetValue >= 0) continue
+        // look at next day's price as forward return
+        const nextPrice = days[i + 1].price
+        const curPrice = days[i].price
+        if (curPrice <= 0 || nextPrice <= 0) continue
+        const fwdReturn = ((nextPrice - curPrice) / curPrice) * 100
+        totalReturn += fwdReturn
+        sellEvents++
+        if (fwdReturn > 0) wins++
+    }
+
+    const avgReturnAfterSell = sellEvents > 0 ? totalReturn / sellEvents : 0
+    const winRate = sellEvents > 0 ? (wins / sellEvents) * 100 : 0
+
+    const firstPrice = days.find((d) => d.price > 0)?.price || 0
+    const lastPrice = [...days].reverse().find((d) => d.price > 0)?.price || 0
+    const overallPriceChange = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0
+
+    // Build verdict
+    const isBullish = combinedTotal < 0 && (winRate >= 55 || overallPriceChange > 2 || avgReturnAfterSell > 0.15)
+    const isBearish = combinedTotal > 0 && overallPriceChange < -2
+    const verdict = isBullish ? 'BULLISH_ANOMALY' : isBearish ? 'BEARISH_ANOMALY' : 'NEUTRAL'
+    const verdictLabel = verdict === 'BULLISH_ANOMALY'
+        ? 'XL/XC Net Sell → Kecenderungan Naik'
+        : verdict === 'BEARISH_ANOMALY'
+            ? 'XL/XC Net Buy → Kecenderungan Turun'
+            : 'Belum Ada Anomali Kuat'
+
+    const insights: string[] = []
+    if (combinedTotal < 0) {
+        insights.push(`XL+XC net sell total ${formatCompact(combinedTotal)} selama ${netSellDays}/${days.length} hari.`)
+    } else {
+        insights.push(`XL+XC net buy total ${formatCompact(combinedTotal)} selama ${days.length} hari.`)
+    }
+    if (sellEvents > 0) {
+        insights.push(`Setelah XL/XC net sell, harga naik ${winRate.toFixed(0)}% hari berikutnya (${wins}/${sellEvents}).`)
+        insights.push(`Rata-rata return setelah XL/XC net sell: ${avgReturnAfterSell >= 0 ? '+' : ''}${avgReturnAfterSell.toFixed(2)}%.`)
+    }
+    if (overallPriceChange !== 0) {
+        insights.push(`Perubahan harga total periode: ${overallPriceChange >= 0 ? '+' : ''}${overallPriceChange.toFixed(2)}%.`)
+    }
+    if (isBullish) {
+        insights.push('⚡ ANOMALI: Ritel (XL/XC) membuang barang, tapi harga cenderung naik. Bandar/smart money kemungkinan akumulasi.')
+    }
+    if (xlTotal < 0 && xcTotal < 0) {
+        insights.push(`Kedua broker ritel konsisten net sell. XL: ${formatCompact(xlTotal)}, XC: ${formatCompact(xcTotal)}.`)
+    }
+
+    return {
+        symbol: symbol.toUpperCase(),
+        days,
+        netSellDays,
+        totalDays: days.length,
+        avgReturnAfterSell,
+        winRate,
+        xlTotalNet: xlTotal,
+        xcTotalNet: xcTotal,
+        combinedTotalNet: combinedTotal,
+        overallPriceChange,
+        verdict,
+        verdictLabel,
+        insights,
+    }
+}
+
 export function analyzeMataDewa(symbol: string, rawSnapshots: Array<{ date: string; raw: unknown }>): MataDewaAnalysis {
     const snapshots = rawSnapshots
         .map((snapshot) => ({ date: snapshot.date, detector: parseMarketDetector(snapshot.raw) }))
@@ -278,14 +541,64 @@ export function analyzeMataDewa(symbol: string, rawSnapshots: Array<{ date: stri
     const footprintZScore = zScore(snapshots.map((snapshot) => snapshot.detector.summary?.totalValue || sumValue(snapshot.detector.buyers)))
     const latestCrossingShare = latest ? crossingShare(latest.detector.buyers, latest.detector.sellers) : 0
     const fakeForeignScore = detectFakeForeign(snapshots)
+    const latestBuyValue = latest ? sumValue(latest.detector.buyers) : 0
+    const latestSellValue = latest ? sumValue(latest.detector.sellers) : 0
+    const latestFlow = latestSmartRetailFlow(latest?.detector)
+    const latestSmartNet = latestFlow.smartBuy - latestFlow.smartSell
+    const latestRetailNet = latestFlow.retailBuy - latestFlow.retailSell
+    const buyRetailShare = latest ? retailShare(latest.detector.buyers) : 0
+    const sellRetailShare = latest ? retailShare(latest.detector.sellers) : 0
+    const latestFakeRetailScore = latest
+        ? Math.max(fakeRetailScore(latest.detector.buyers), fakeRetailScore(latest.detector.sellers))
+        : 0
+    const primaryAccumulator = topAccumulators.find((item) => item.tier !== 1 && item.avgCost > 0) || topAccumulators.find((item) => item.avgCost > 0)
+    const bandarCostGap = primaryAccumulator?.avgCost && currentPrice > 0
+        ? ((currentPrice - primaryAccumulator.avgCost) / primaryAccumulator.avgCost) * 100
+        : 0
+    const costDiscountScore = primaryAccumulator?.avgCost ? clamp01(-bandarCostGap / 8) : 0
+    const costPremiumRisk = primaryAccumulator?.avgCost ? clamp01(bandarCostGap / 18) : 0
+    const accumulationQualityScore = clamp01(
+        (clamp01(smartMoneyFlowScore) * 0.28) +
+        (buyerConcentration * 0.18) +
+        (sellRetailShare * 0.16) +
+        (persistenceScore * 0.16) +
+        (costDiscountScore * 0.12) +
+        ((1 - latestCrossingShare) * 0.1)
+    )
+    const distributionRiskScore = clamp01(
+        (clamp01(-smartMoneyFlowScore) * 0.3) +
+        (sellerConcentration * 0.18) +
+        (buyRetailShare * 0.16) +
+        (costPremiumRisk * 0.16) +
+        (latestCrossingShare * 0.1) +
+        ((latestRetailNet > 0 && latestSmartNet < 0) ? 0.1 : 0)
+    )
+    const absorptionStrength = safeDiv(latestBuyValue, latestSellValue)
+    const markupReadinessScore = clamp01(
+        (silentAccumulationScore * 0.32) +
+        (persistenceScore * 0.22) +
+        (buyerConcentration * 0.18) +
+        (costDiscountScore * 0.12) +
+        ((1 - latestCrossingShare) * 0.1) +
+        (clamp01(absorptionStrength - 1) * 0.06)
+    )
+    const shakeoutScore = clamp01(
+        (costDiscountScore * 0.32) +
+        (sellRetailShare * 0.24) +
+        (buyerConcentration * 0.18) +
+        (clamp01(smartMoneyFlowScore) * 0.16) +
+        ((latestSmartNet >= 0 && latestRetailNet < 0) ? 0.1 : 0)
+    )
+    const smartMoneyDivergenceScore = clamp01(Math.abs(smartMoneyFlowScore)) * Math.sign(smartMoneyFlowScore) * (bandarCostGap < 0 ? 1 : -1)
 
     let score = 50
-    score += smartMoneyFlowScore * 25
-    score += buyerConcentration * 12
-    score += persistenceScore * 15
-    score += silentAccumulationScore * 15
-    score -= sellerConcentration * 10
-    score -= latestCrossingShare * 18
+    score += smartMoneyFlowScore * 18
+    score += accumulationQualityScore * 18
+    score += markupReadinessScore * 12
+    score += shakeoutScore * 6
+    score -= distributionRiskScore * 22
+    score -= latestCrossingShare * 12
+    score -= latestFakeRetailScore * 6
     if (netRetail > 0 && netSmartMoney < 0) score -= 20
     score = Math.round(Math.max(0, Math.min(100, score)))
 
@@ -304,6 +617,14 @@ export function analyzeMataDewa(symbol: string, rawSnapshots: Array<{ date: stri
         footprintZScore,
         crossingShare: latestCrossingShare,
         fakeForeignScore,
+        bandarCostGap,
+        accumulationQualityScore,
+        distributionRiskScore,
+        fakeRetailScore: latestFakeRetailScore,
+        absorptionStrength,
+        markupReadinessScore,
+        shakeoutScore,
+        smartMoneyDivergenceScore,
         avgCostPositions: positions.sort((a, b) => b.netValue - a.netValue).slice(0, 10),
         topAccumulators,
     }
